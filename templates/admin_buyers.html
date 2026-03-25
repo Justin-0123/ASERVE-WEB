@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Compradores - Admin{% endblock %}
+
+{% block content %}
+<!-- =====================================================
+     ADMIN / COMPRADORES (RESPONSIVE)
+     - Desktop (md+): tabla compacta
+     - Mobile (<md): cards apiladas (sin scroll horizontal)
+     ===================================================== -->
+
+<div class="card shadow-sm card-compact">
+  <div class="card-body">
+
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h4 class="mb-1">Compradores</h4>
+        <small class="text-muted">Resumen por comprador (contado + crédito)</small>
+      </div>
+
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">
+        Volver
+      </a>
+    </div>
+
+    <!-- =====================================================
+         VISTA MÓVIL: CARDS (visible solo en < md)
+         ===================================================== -->
+    <div class="d-md-none">
+      {% for b in buyers %}
+        <div class="border rounded-3 p-3 mb-2 bg-white">
+
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">{{ b.comprador }}</div>
+              <div class="mt-1">
+                {% if b.tipo == "registrado" %}
+                  <span class="badge bg-primary">Registrado</span>
+                {% else %}
+                  <span class="badge bg-secondary">No Asociado</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="text-end">
+              <div class="small text-muted">Órdenes</div>
+              <div class="fw-semibold">{{ b.num_ordenes }}</div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mt-2">
+            <div>
+              <div class="small text-muted">Total acumulado</div>
+              <div class="fw-bold">₡{{ "%.2f"|format(b.total_monto) }}</div>
+            </div>
+
+            <!-- Botón grande para dedo -->
+            <a class="btn btn-primary btn-sm"
+               href="{{ url_for('admin_buyer_history', key=b.buyer_key) }}">
+              Ver historial
+            </a>
+          </div>
+        </div>
+      {% else %}
+        <div class="text-center text-muted py-4">
+          No hay compradores aún.
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- =====================================================
+         VISTA DESKTOP: TABLA (visible desde md en adelante)
+         ===================================================== -->
+    <div class="d-none d-md-block">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm table-compact align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Comprador</th>
+              <th style="width: 120px;">Tipo</th>
+              <th style="width: 110px;">Órdenes</th>
+              <th style="width: 160px;">Total</th>
+              <th style="width: 140px;">Acción</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for b in buyers %}
+            <tr>
+              <td class="fw-semibold">{{ b.comprador }}</td>
+              <td>
+                {% if b.tipo == "registrado" %}
+                  <span class="badge bg-primary">Registrado</span>
+                {% else %}
+                  <span class="badge bg-secondary">No Asociado</span>
+                {% endif %}
+              </td>
+              <td>{{ b.num_ordenes }}</td>
+              <td class="fw-bold">₡{{ "%.2f"|format(b.total_monto) }}</td>
+              <td>
+                <a class="btn btn-sm btn-outline-primary"
+                   href="{{ url_for('admin_buyer_history', key=b.buyer_key) }}">
+                  Ver historial
+                </a>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">No hay compradores aún.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+

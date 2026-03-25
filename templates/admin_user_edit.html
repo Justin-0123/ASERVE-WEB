@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Editar usuario - Admin{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Editar usuario</h5>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_users') }}">Volver</a>
+    </div>
+
+    <form method="POST" class="mt-3">
+      <div class="row g-2">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Nombre</label>
+          <input class="form-control" name="nombre" value="{{ u.nombre }}" required>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">Usuario</label>
+          <input class="form-control" name="usuario" value="{{ u.usuario }}" required>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <label class="form-label">Rol</label>
+          <select class="form-select" name="rol" required>
+            <option value="asociado" {% if u.rol=='asociado' %}selected{% endif %}>Asociado</option>
+            <option value="admin" {% if u.rol=='admin' %}selected{% endif %}>Admin</option>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <label class="form-label">Estado</label>
+          <select class="form-select" name="estado" required>
+            <option value="activo" {% if u.estado=='activo' %}selected{% endif %}>activo</option>
+            <option value="bloqueado" {% if u.estado=='bloqueado' %}selected{% endif %}>bloqueado</option>
+          </select>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">Reset contraseña (opcional)</label>
+          <input class="form-control" name="new_password" type="password" placeholder="Dejar vacío para no cambiar">
+        </div>
+      </div>
+
+      <button class="btn btn-primary mt-3" type="submit">Guardar cambios</button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

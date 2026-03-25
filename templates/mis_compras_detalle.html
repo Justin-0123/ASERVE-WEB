@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Detalle compra #{{ orden.id }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h5 class="mb-0">Detalle compra #{{ orden.id }}</h5>
+        <small class="text-muted">{{ orden.fecha }} • {{ orden.tipo_pago }} • {{ orden.estado }}</small>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('mis_compras') }}">Volver</a>
+    </div>
+
+    <!-- Tabla items -->
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-2">
+        <thead class="table-dark">
+          <tr>
+            <th>Producto</th>
+            <th style="width:90px;">Cant.</th>
+            <th style="width:140px;">Precio</th>
+            <th style="width:140px;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr>
+            <td>{{ it.nombre }}</td>
+            <td>{{ it.cantidad }}</td>
+            <td>₡{{ "%.2f"|format(it.precio_unitario) }}</td>
+            <td><b>₡{{ "%.2f"|format(it.subtotal) }}</b></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Total -->
+    <div class="d-flex justify-content-end">
+      <div class="border rounded p-2 text-end" style="min-width: 220px;">
+        <div class="small text-muted">Total</div>
+        <div class="fw-bold">₡{{ "%.2f"|format(orden.total) }}</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

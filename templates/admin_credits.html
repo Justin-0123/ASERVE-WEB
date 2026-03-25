@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Créditos pendientes - Admin{% endblock %}
+
+{% block content %}
+<!-- =====================================================
+     ADMIN / CRÉDITOS PENDIENTES (POR COLABORADOR)
+     - Agrupa créditos pendientes por colaborador
+     - Muestra deuda total y permite entrar al detalle
+     ===================================================== -->
+
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h4 class="mb-0">Créditos pendientes</h4>
+        <div class="text-muted">Deuda agrupada por colaborador</div>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">Volver</a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Colaborador</th>
+            <th style="width: 140px;"># Créditos</th>
+            <th style="width: 180px;">Deuda total</th>
+            <th style="width: 140px;">Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in creditos %}
+          <tr>
+            <td>{{ c.comprador }}</td>
+            <td>{{ c.num_ordenes }}</td>
+            <td><b>₡{{ "%.2f"|format(c.deuda_total) }}</b></td>
+            <td>
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{{ url_for('admin_credits_user', user_id=c.user_id) }}">
+                Ver
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="text-center text-muted">No hay créditos pendientes.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

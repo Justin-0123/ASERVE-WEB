@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Detalle de orden #{{ orden.id }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <!-- Encabezado con botones -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0">Detalle de orden #{{ orden.id }}</h5>
+
+      <div class="d-flex gap-2">
+        {# Botón 1: volver a créditos (lista general) si venimos de créditos #}
+        {% if from_page == "credits" %}
+          <a class="btn btn-outline-secondary btn-sm"
+             href="{{ url_for('admin_credits') }}">
+            Volver a créditos
+          </a>
+        {% else %}
+          <a class="btn btn-outline-secondary btn-sm"
+             href="{{ url_for('admin_orders') }}">
+            Volver al historial
+          </a>
+        {% endif %}
+
+        {# Botón 2: volver al colaborador (solo si viene user_id) #}
+        {% if from_page == "credits" and back_user_id %}
+          <a class="btn btn-outline-primary btn-sm"
+             href="{{ url_for('admin_credits_user', user_id=back_user_id) }}">
+            Volver al colaborador
+          </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Datos -->
+    <p class="mb-1"><b>Fecha:</b> {{ orden.fecha }}</p>
+    <p class="mb-1"><b>Pago:</b> {{ orden.tipo_pago }}</p>
+    <p class="mb-1"><b>Estado:</b> {{ orden.estado }}</p>
+    <p class="mb-3">
+      <b>Comprador:</b>
+      {% if orden.user_id %}
+        {{ orden.nombre_usuario }} <span class="text-muted">(registrado)</span>
+      {% else %}
+        {{ orden.nombre_no_asociado }} <span class="text-muted">(no asociado)</span>
+      {% endif %}
+    </p>
+
+    <!-- Tabla -->
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Producto</th>
+            <th style="width:140px;">Cantidad</th>
+            <th style="width:160px;">Precio unitario</th>
+            <th style="width:160px;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr>
+            <td>{{ it.nombre }}</td>
+            <td>{{ it.cantidad }}</td>
+            <td>₡{{ "%.2f"|format(it.precio_unitario) }}</td>
+            <td><b>₡{{ "%.2f"|format(it.subtotal) }}</b></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="text-end mt-3">
+      <h5 class="mb-0">Total factura: <b>₡{{ "%.2f"|format(orden.total) }}</b></h5>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

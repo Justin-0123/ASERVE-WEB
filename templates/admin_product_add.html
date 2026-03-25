@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Nuevo producto - Admin{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h5 class="mb-0">Nuevo producto</h5>
+        <small class="text-muted">Crear un producto con stock mínimo e imagen (opcional)</small>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">Volver</a>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" class="mt-3">
+      <div class="row g-3">
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">Nombre</label>
+          <input type="text" name="nombre" class="form-control" required>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label">Precio (₡)</label>
+          <input type="number" name="precio" class="form-control" step="0.01" min="0" required>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label">Stock</label>
+          <input type="number" name="stock" class="form-control" min="0" required>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label">Stock mínimo</label>
+          <input type="number" name="stock_minimo" class="form-control" min="0" value="0">
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">Imagen (opcional)</label>
+          <input type="file" name="imagen" class="form-control" accept=".png,.jpg,.jpeg,.webp">
+          <div class="form-text">Formatos: png, jpg, jpeg, webp</div>
+        </div>
+
+        <div class="col-12">
+          <button class="btn btn-primary">Guardar producto</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('admin_products') }}">Cancelar</a>
+        </div>
+
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}
+
+

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Stock - Admin{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h5 class="mb-0">Stock de productos</h5>
+        <small class="text-muted">Bajos detectados: {{ bajos_count }}</small>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">Volver</a>
+        <a class="btn btn-outline-dark btn-sm" href="{{ url_for('admin_products') }}">Gestionar productos</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('admin_product_add') }}">+ Nuevo producto</a>
+
+        <!-- ✅ NUEVOS: accesos a gestión -->
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin_products') }}">
+          Gestión de productos
+        </a>
+
+        <a class="btn btn-primary btn-sm" href="{{ url_for('add_product') }}">
+          + Nuevo producto
+        </a>
+
+        <!-- Filtro solo bajos / ver todos -->
+        {% if only_low %}
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin_stock') }}">Ver todos</a>
+        {% else %}
+          <a class="btn btn-outline-danger btn-sm" href="{{ url_for('admin_stock', only_low=1) }}">Solo bajos</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Producto</th>
+            <th style="width:110px;">Stock</th>
+            <th style="width:130px;">Mínimo</th>
+            <th style="width:120px;">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in productos %}
+          {% set bajo = (p.activo==1 and p.stock_minimo|int > 0 and p.stock|int <= p.stock_minimo|int) %}
+          <tr class="{% if bajo %}table-warning{% endif %}">
+            <td>{{ p.nombre }}</td>
+            <td><b>{{ p.stock }}</b></td>
+            <td>{{ p.stock_minimo }}</td>
+            <td>
+              {% if p.activo == 1 %}
+                {% if bajo %}
+                  <span class="badge bg-danger">bajo</span>
+                {% else %}
+                  <span class="badge bg-success">ok</span>
+                {% endif %}
+              {% else %}
+                <span class="badge bg-secondary">inactivo</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="text-center text-muted">No hay productos.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

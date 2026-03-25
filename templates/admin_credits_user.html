@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Créditos - {{ user.nombre }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <div>
+        <h5 class="mb-0">Créditos pendientes</h5>
+        <small class="text-muted">Colaborador: <b>{{ user.nombre }}</b></small>
+      </div>
+
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('admin_credits') }}" class="btn btn-outline-secondary btn-sm">
+          Volver a créditos
+        </a>
+      </div>
+    </div>
+
+    <!-- Resumen -->
+    <div class="d-flex justify-content-end mb-3">
+      <div class="border rounded p-2 text-end" style="min-width: 200px;">
+        <div class="small text-muted">Deuda total pendiente</div>
+        <div class="fs-5 fw-bold">₡{{ "%.2f"|format(deuda_total) }}</div>
+      </div>
+    </div>
+
+    {% if orders and orders|length > 0 %}
+
+    <!-- Form para pago en bloque -->
+    <form method="POST"
+          action="{{ url_for('admin_credits_pay_bulk', user_id=user.id) }}"
+          onsubmit="return confirm('¿Marcar como pagadas las órdenes seleccionadas?');">
+
+      <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="checkAll">
+          <label class="form-check-label" for="checkAll">
+            Seleccionar todas
+          </label>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+          <div class="small text-muted">Total seleccionado:</div>
+          <div class="fw-bold" id="selectedTotal">₡0.00</div>
+
+          <button type="submit" class="btn btn-success btn-sm" id="btnPaySelected" disabled>
+            Pagar seleccionadas
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th style="width: 48px;"></th>
+              <th style="width: 90px;">Orden</th>
+              <th>Fecha</th>
+              <th style="width: 160px;">Total</th>
+              <th style="width: 220px;">Acción</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for o in orders %}
+            <tr>
+              <td class="text-center">
+                <input class="form-check-input orderCheck"
+                       type="checkbox"
+                       name="order_ids"
+                       value="{{ o.id }}"
+                       data-total="{{ o.total }}">
+              </td>
+
+              <td><b>#{{ o.id }}</b></td>
+              <td>{{ o.fecha }}</td>
+              <td><b>₡{{ "%.2f"|format(o.total) }}</b></td>
+
+              <td class="d-flex gap-2">
+                <!-- Ver detalle (pasamos from_page y user_id para que salgan los 2 botones arriba) -->
+                <a class="btn btn-sm btn-outline-primary"
+                   href="{{ url_for('admin_order_detail', order_id=o.id, from_page='credits', user_id=user.id) }}">
+                  Ver
+                </a>
+
+                <!-- Pago individual (si lo querés mantener) -->
+                <form method="POST"
+                      action="{{ url_for('admin_credits_pay', order_id=o.id) }}"
+                      onsubmit="return confirm('¿Marcar esta orden como pagada?');">
+                  <button class="btn btn-sm btn-success" type="submit">
+                    Marcar pagada
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </form>
+
+    {% else %}
+      <div class="text-center text-muted py-4">
+        No hay créditos pendientes para este colaborador.
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+  // Totales en vivo
+  const checks = () => Array.from(document.querySelectorAll(".orderCheck"));
+  const selectedTotalEl = document.getElementById("selectedTotal");
+  const btnPaySelected = document.getElementById("btnPaySelected");
+  const checkAll = document.getElementById("checkAll");
+
+  function formatCRC(n) {
+    // formato simple con 2 decimales
+    return "₡" + n.toFixed(2);
+  }
+
+  function recalc() {
+    let total = 0;
+    let count = 0;
+
+    checks().forEach(chk => {
+      if (chk.checked) {
+        const val = parseFloat(chk.dataset.total || "0");
+        total += val;
+        count += 1;
+      }
+    });
+
+    selectedTotalEl.textContent = formatCRC(total);
+    btnPaySelected.disabled = (count === 0);
+
+    // CheckAll: marcado si todos están marcados
+    const all = checks();
+    const allChecked = all.length > 0 && all.every(c => c.checked);
+    checkAll.checked = allChecked;
+  }
+
+  // Eventos
+  if (checkAll) {
+    checkAll.addEventListener("change", () => {
+      const state = checkAll.checked;
+      checks().forEach(chk => chk.checked = state);
+      recalc();
+    });
+  }
+
+  checks().forEach(chk => chk.addEventListener("change", recalc));
+
+  // Inicial
+  recalc();
+</script>
+{% endblock %}

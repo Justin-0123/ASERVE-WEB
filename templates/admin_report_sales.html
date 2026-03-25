@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Reporte ventas - Admin{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h5 class="mb-0">Reporte de ventas</h5>
+        <small class="text-muted">Filtrá por fechas y tipo de pago</small>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">Volver</a>
+    </div>
+
+    <form class="row g-2 mb-3" method="GET" action="{{ url_for('admin_report_sales') }}">
+      <div class="col-6 col-md-3">
+        <label class="form-label">Desde</label>
+        <input type="date" class="form-control form-control-sm" name="start" value="{{ start }}">
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label">Hasta</label>
+        <input type="date" class="form-control form-control-sm" name="end" value="{{ end }}">
+      </div>
+
+      <div class="col-12 col-md-3">
+        <label class="form-label">Tipo de pago</label>
+        <select class="form-select form-select-sm" name="pago">
+          <option value="" {% if not pago %}selected{% endif %}>Todos</option>
+          <option value="contado" {% if pago == "contado" %}selected{% endif %}>Contado</option>
+          <option value="credito" {% if pago == "credito" or pago == "crédito" %}selected{% endif %}>Crédito</option>
+        </select>
+      </div>
+
+      <div class="col-12 col-md-3 d-flex align-items-end gap-2">
+        <button class="btn btn-primary btn-sm w-100">Aplicar</button>
+        <a class="btn btn-outline-secondary btn-sm w-100" href="{{ url_for('admin_report_sales') }}">Limpiar</a>
+      </div>
+    </form>
+
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="border rounded p-2">
+          <small class="text-muted">Órdenes</small>
+          <div class="fw-bold">{{ resumen.num_ordenes }}</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <div class="border rounded p-2">
+          <small class="text-muted">Total general</small>
+          <div class="fw-bold">₡{{ "%.2f"|format(resumen.total_general) }}</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <div class="border rounded p-2">
+          <small class="text-muted">Contado</small>
+          <div class="fw-bold">₡{{ "%.2f"|format(resumen.total_contado) }}</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <div class="border rounded p-2">
+          <small class="text-muted">Crédito</small>
+          <div class="fw-bold">₡{{ "%.2f"|format(resumen.total_credito) }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Orden</th>
+            <th>Fecha</th>
+            <th>Comprador</th>
+            <th>Pago</th>
+            <th>Estado</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td>#{{ o.id }}</td>
+            <td>{{ o.fecha }}</td>
+            <td>{{ o.comprador }}</td>
+
+            {% set pago_norm = (o.tipo_pago|string|lower|trim).replace('é','e') %}
+            <td>
+              {% if pago_norm == "credito" %}
+                <span class="badge bg-warning text-dark">Crédito</span>
+              {% else %}
+                <span class="badge bg-success">Contado</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% if (o.estado|string|lower|trim) == "pendiente" %}
+                <span class="badge bg-danger">pendiente</span>
+              {% else %}
+                <span class="badge bg-primary">pagada</span>
+              {% endif %}
+            </td>
+
+            <td><b>₡{{ "%.2f"|format(o.total) }}</b></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted">Sin datos.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

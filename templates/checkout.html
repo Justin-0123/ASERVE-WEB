@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Checkout{% endblock %}
+
+{% block content %}
+<!-- =====================================================
+     CHECKOUT
+     Resumen de carrito + selección de método de pago
+     ===================================================== -->
+
+<h4 class="mb-3">Finalizar compra</h4>
+
+<div class="row g-3">
+
+  <!-- Resumen -->
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-body p-2">
+
+        <table class="table table-bordered align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Producto</th>
+              <th style="width:110px;">Cant.</th>
+              <th style="width:140px;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in items %}
+            <tr>
+              <td>{{ it.nombre }}</td>
+              <td>{{ it.cantidad }}</td>
+              <td>₡{{ "%.2f"|format(it.subtotal) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between mt-3">
+      <a class="btn btn-outline-primary" href="{{ url_for('ver_carrito') }}">Volver al carrito</a>
+      <div class="fs-5">Total: <b>₡{{ "%.2f"|format(total) }}</b></div>
+    </div>
+  </div>
+
+  <!-- Pago -->
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+
+        <!-- =====================================================
+             FORMULARIO DE PAGO
+             - No asociado: solo contado y debe escribir nombre
+             - Asociado: contado o crédito
+             ===================================================== -->
+        <form method="POST">
+
+          <!-- =====================================================
+     NOMBRE PARA NO ASOCIADOS
+     Se solicita cuando tipo_usuario = no_asociado
+     (aunque exista sesión, por ejemplo un usuario general)
+     ===================================================== -->
+    {% if es_no_asociado %}
+        <div class="mb-3">
+        <label class="form-label">Nombre (no asociado)</label>
+        <input class="form-control" name="nombre_no_asociado" required>
+        <div class="form-text">Necesario para registrar la compra de no Asociados.</div>
+        </div>
+    {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label">Tipo de pago</label>
+    <!-- =====================================================
+     TIPO DE PAGO
+     - Asociado: contado o crédito
+     - No asociado: solo contado
+     ===================================================== -->
+    {% if can_credit %}
+     <select class="form-select" name="tipo_pago" required>
+        <option value="contado">Contado</option>
+            <option value="credito">Crédito</option>
+         </select>
+    {% else %}
+    <select class="form-select" name="tipo_pago" required>
+            <option value="contado">Contado</option>
+        </select>
+    <div class="form-text">El crédito solo está disponible para usuarios registrados.</div>
+    {% endif %}
+
+          </div>
+
+          <button class="btn btn-success w-100">
+            Confirmar compra
+          </button>
+
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

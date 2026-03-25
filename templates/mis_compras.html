@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Mis compras{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h5 class="mb-0">Mis compras</h5>
+        <small class="text-muted">Filtra por pago y fechas</small>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('perfil') }}">Volver al perfil</a>
+    </div>
+
+    <!-- Filtros -->
+    <form method="GET" class="row g-2 mb-3">
+      <div class="col-6 col-md-3">
+        <label class="form-label">Tipo de pago</label>
+        <select class="form-select form-select-sm" name="pago">
+          <option value="" {% if pago=="" %}selected{% endif %}>Todos</option>
+          <option value="contado" {% if pago=="contado" %}selected{% endif %}>Contado</option>
+          <option value="credito" {% if pago=="credito" %}selected{% endif %}>Crédito</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label">Desde</label>
+        <input type="date" class="form-control form-control-sm" name="start" value="{{ start }}">
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label">Hasta</label>
+        <input type="date" class="form-control form-control-sm" name="end" value="{{ end }}">
+      </div>
+
+      <div class="col-6 col-md-3 d-flex align-items-end">
+        <button class="btn btn-primary btn-sm w-100">Aplicar</button>
+      </div>
+    </form>
+
+    <!-- Total del rango -->
+    <div class="d-flex justify-content-end mb-2">
+      <div class="border rounded p-2 text-end" style="min-width: 220px;">
+        <div class="small text-muted">Total del filtro</div>
+        <div class="fw-bold">₡{{ "%.2f"|format(total_rango) }}</div>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:90px;">Orden</th>
+            <th>Fecha</th>
+            <th style="width:110px;">Pago</th>
+            <th style="width:120px;">Estado</th>
+            <th style="width:150px;">Total</th>
+            <th style="width:90px;">Ver</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td><b>#{{ o.id }}</b></td>
+            <td>{{ o.fecha }}</td>
+            <td>{{ o.tipo_pago }}</td>
+            <td>{{ o.estado }}</td>
+            <td><b>₡{{ "%.2f"|format(o.total) }}</b></td>
+            <td>
+              <a class="btn btn-outline-primary btn-sm"
+                 href="{{ url_for('mis_compras_detalle', order_id=o.id) }}">
+                Ver
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="text-center text-muted">Aún no tienes compras registradas.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

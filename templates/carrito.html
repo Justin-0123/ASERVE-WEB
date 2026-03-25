@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Carrito - ASERVE{% endblock %}
+
+{% block content %}
+<!-- =====================================================
+     CARRITO DE COMPRAS
+     Lista items, permite + / - / eliminar / vaciar
+     ===================================================== -->
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Carrito</h4>
+
+  {% if items|length > 0 %}
+  <form method="POST" action="{{ url_for('carrito_clear') }}">
+    <button class="btn btn-outline-danger btn-sm">Vaciar carrito</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if items|length == 0 %}
+  <div class="alert alert-info">Tu carrito está vacío.</div>
+  <a class="btn btn-primary" href="{{ url_for('catalogo') }}">Volver al catálogo</a>
+{% else %}
+
+  <div class="card shadow-sm">
+    <div class="card-body p-2">
+      <table class="table table-bordered align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Producto</th>
+            <th style="width: 140px;">Cantidad</th>
+            <th style="width: 140px;">Subtotal</th>
+            <th style="width: 100px;">Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          {% for it in items %}
+          <tr>
+            <td>
+              <div class="d-flex gap-2 align-items-center">
+                {% if it.image_filename %}
+                  <img src="{{ url_for('static', filename='uploads/' ~ it.image_filename) }}"
+                       style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid #ddd;">
+                {% else %}
+                  <div class="bg-light d-flex align-items-center justify-content-center"
+                       style="width:60px;height:60px;border-radius:8px;border:1px solid #ddd;">
+                    <span class="text-muted small">N/A</span>
+                  </div>
+                {% endif %}
+
+                <div>
+                  <div class="fw-semibold">{{ it.nombre }}</div>
+                  <div class="text-muted small">₡{{ "%.2f"|format(it.precio) }} • Stock: {{ it.stock }}</div>
+                </div>
+              </div>
+            </td>
+
+            <td>
+              <!-- =====================================================
+                   Controles de cantidad:
+                   - dec: resta 1
+                   - inc: suma 1 (valida stock)
+                   ===================================================== -->
+              <div class="d-flex gap-1">
+                <form method="POST" action="{{ url_for('carrito_dec', product_id=it.id) }}">
+                  <button class="btn btn-sm btn-outline-secondary">-</button>
+                </form>
+
+                <div class="px-2 d-flex align-items-center">{{ it.cantidad }}</div>
+
+                <form method="POST" action="{{ url_for('carrito_inc', product_id=it.id) }}">
+                  <button class="btn btn-sm btn-outline-secondary">+</button>
+                </form>
+              </div>
+            </td>
+
+            <td class="fw-semibold">₡{{ "%.2f"|format(it.subtotal) }}</td>
+
+            <td>
+              <form method="POST" action="{{ url_for('carrito_remove', product_id=it.id) }}">
+                <button class="btn btn-sm btn-outline-danger">Quitar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <a class="btn btn-outline-primary" href="{{ url_for('catalogo') }}">Seguir comprando</a>
+    <div class="fs-5">
+      Total: <b>₡{{ "%.2f"|format(total) }}</b>
+    </div>
+    <a class="btn btn-success" href="{{ url_for('checkout') }}">Ir a pagar</a>
+  </div>
+
+{% endif %}
+{% endblock %}

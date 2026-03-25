@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Historial de compras - Admin{% endblock %}
+
+{% block content %}
+<!-- =====================================================
+     ADMIN / HISTORIAL DE ÓRDENES
+     - Filtros por estado, tipo de pago y búsqueda por comprador
+     - Tabla con enlace a detalle
+     ===================================================== -->
+
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h4 class="mb-0">Historial de compras</h4>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">Volver al panel</a>
+    </div>
+
+    <!-- =======================
+         FILTROS
+         ======================= -->
+    <form class="row g-2 align-items-end mb-3" method="GET" action="{{ url_for('admin_orders') }}">
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Estado</label>
+        <select class="form-select" name="estado">
+          <option value="" {% if not estado %}selected{% endif %}>Todos</option>
+          <option value="pagada" {% if estado == "pagada" %}selected{% endif %}>Pagada</option>
+          <option value="pendiente" {% if estado == "pendiente" %}selected{% endif %}>Pendiente</option>
+        </select>
+      </div>
+
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Tipo de pago</label>
+        <select class="form-select" name="pago">
+          <option value="" {% if not pago %}selected{% endif %}>Todos</option>
+          <option value="contado" {% if pago == "contado" %}selected{% endif %}>Contado</option>
+          <option value="credito" {% if pago == "credito" %}selected{% endif %}>Crédito</option>
+        </select>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label mb-1">Buscar comprador</label>
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Ej: Ana, Carlos, etc.">
+      </div>
+<div class="col-12 col-md-3">
+  <label class="form-label mb-1">Desde</label>
+  <input type="date" name="start" class="form-control form-control-sm"
+         value="{{ start }}">
+</div>
+<div class="col-12 col-md-3">
+    <label class="form-label mb-1">Hasta</label>
+    <input type="date" name="end" class="form-control form-control-sm"
+         value="{{ end }}">
+</div>
+
+      <div class="col-12 col-md-2 d-flex gap-2">
+        <button class="btn btn-primary w-100">Filtrar</button>
+        <a class="btn btn-outline-secondary w-100" href="{{ url_for('admin_orders') }}">Limpiar</a>
+      </div>
+    </form>
+
+    <!-- =======================
+         TABLA
+         ======================= -->
+    <table class="table table-bordered table-striped align-middle mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th style="width: 90px;">Orden</th>
+          <th style="width: 180px;">Fecha</th>
+          <th>Comprador</th>
+          <th style="width: 140px;">Pago</th>
+          <th style="width: 140px;">Estado</th>
+          <th style="width: 160px;">Total</th>
+          <th style="width: 120px;">Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td>#{{ o.id }}</td>
+          <td>{{ o.fecha }}</td>
+
+          <!-- Comprador: nombre_usuario si existe, si no nombre_no_asociado -->
+          <td>
+            {% if o.nombre_usuario %}
+              {{ o.nombre_usuario }}
+              <span class="text-muted small">(registrado)</span>
+            {% else %}
+              {{ o.nombre_no_asociado }}
+              <span class="text-muted small">(no asociado)</span>
+            {% endif %}
+          </td>
+
+          <td>
+            {% if o.tipo_pago == "credito" %}
+              <span class="badge bg-warning text-dark">Crédito</span>
+            {% else %}
+              <span class="badge bg-success">Contado</span>
+            {% endif %}
+          </td>
+
+          <td>
+            {% if o.estado == "pendiente" %}
+              <span class="badge bg-danger">Pendiente</span>
+            {% else %}
+              <span class="badge bg-primary">Pagada</span>
+            {% endif %}
+          </td>
+
+          <td><b>₡{{ "%.2f"|format(o.total) }}</b></td>
+
+          <td>
+            <a class="btn btn-sm btn-outline-primary"
+               href="{{ url_for('admin_order_detail', order_id=o.id) }}">
+              Ver
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted">No hay órdenes aún.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+</div>
+{% endblock %}

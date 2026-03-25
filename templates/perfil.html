@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Perfil{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h5 class="mb-0">Mi perfil</h5>
+        <small class="text-muted">Gestiona tu cuenta y revisa tus compras</small>
+      </div>
+
+      {% if session.get("rol") == "admin" %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">Ir al panel admin</a>
+      {% else %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('catalogo') }}">Volver al catálogo</a>
+      {% endif %}
+    </div>
+
+    <!-- Datos del usuario -->
+    <div class="row g-2 mb-3">
+      <div class="col-12 col-md-6">
+        <div class="border rounded p-2">
+          <div class="small text-muted">Nombre</div>
+          <div class="fw-bold">{{ user.nombre }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="border rounded p-2">
+          <div class="small text-muted">Usuario</div>
+          <div class="fw-bold">{{ user.usuario }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="border rounded p-2">
+          <div class="small text-muted">Rol</div>
+          <div class="fw-bold">{{ user.rol }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acceso a historial -->
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('mis_compras') }}">
+        Ver mis compras
+      </a>
+    </div>
+
+    <hr>
+
+    <!-- Cambiar contraseña -->
+    <h6 class="mb-2">Cambiar contraseña</h6>
+    <form method="POST">
+      <div class="row g-2">
+        <div class="col-12 col-md-4">
+          <label class="form-label">Contraseña actual</label>
+          <input class="form-control form-control-sm" type="password" name="password_actual" required>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Nueva contraseña</label>
+          <input class="form-control form-control-sm" type="password" name="password_nueva" required>
+          <small class="text-muted">Mínimo 6 caracteres</small>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Confirmar nueva</label>
+          <input class="form-control form-control-sm" type="password" name="password_confirmar" required>
+        </div>
+      </div>
+
+      <button class="btn btn-success btn-sm mt-3" type="submit">
+        Guardar nueva contraseña
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

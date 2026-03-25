@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Catálogo{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm card-compact">
+  <div class="card-body">
+
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h4 class="mb-0">Catálogo de Productos</h4>
+        <small class="text-muted">Buscador en vivo</small>
+      </div>
+    </div>
+
+    <!-- 🔎 Buscador en vivo -->
+    <div class="mb-3">
+      <input
+        id="searchFront"
+        type="text"
+        class="form-control"
+        placeholder="🔎 Buscar producto..."
+        autocomplete="off"
+      >
+      <small class="text-muted">Ejemplo: Coca, Jalapeño, Tropical…</small>
+    </div>
+
+    <!-- Contenedor de productos -->
+    <div class="row g-3" id="productsContainer">
+      {% for p in productos %}
+        <!-- ✅ Cada producto debe tener la clase product-item y data-name -->
+        <div class="col-12 col-sm-6 col-md-4 product-item" data-name="{{ p.nombre|lower }}">
+
+          <!-- =========================
+               TU CARD (puedes ajustar)
+               ========================= -->
+          <div class="card shadow-sm h-100">
+            {% if p.image_filename %}
+              <img
+                src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
+                class="card-img-top"
+                alt="{{ p.nombre }}"
+                style="max-height:220px; object-fit:contain;"
+              >
+            {% endif %}
+
+            <div class="card-body d-flex flex-column">
+              <h6 class="fw-bold mb-1">{{ p.nombre }}</h6>
+              <small class="text-muted">Stock: {{ p.stock }}</small>
+
+              <div class="fw-bold mt-2 mb-3">₡{{ "%.2f"|format(p.precio) }}</div>
+
+              <form method="POST" action="{{ url_for('carrito_add', product_id=p.id) }}" class="mt-auto">
+                <button type="submit" class="btn btn-primary w-100 btn-sm">
+                  Agregar
+                </button>
+              </form>
+            </div>
+          </div>
+
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Mensaje si no hay coincidencias -->
+    <div id="noResults" class="text-center text-muted mt-3 d-none">
+      No se encontraron productos con ese nombre.
+    </div>
+
+  </div>
+</div>
+
+<!-- ✅ JS: búsqueda en vivo (sin Enter) -->
+<script>
+  const input = document.getElementById("searchFront");
+  const items = document.querySelectorAll(".product-item");
+  const noResults = document.getElementById("noResults");
+
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    let visibleCount = 0;
+
+    items.forEach(el => {
+      const name = (el.dataset.name || "");
+      const match = name.includes(q);
+
+      el.style.display = match ? "" : "none";
+      if (match) visibleCount++;
+    });
+
+    // Mostrar/ocultar mensaje de "no resultados"
+    if (q && visibleCount === 0) {
+      noResults.classList.remove("d-none");
+    } else {
+      noResults.classList.add("d-none");
+    }
+  });
+</script>
+{% endblock %}
