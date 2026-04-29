@@ -7,6 +7,8 @@ import bcrypt
 from datetime import datetime, timedelta
 from io import BytesIO
 
+from dotenv import load_dotenv
+
 from flask import (
     Flask, render_template, request,
     redirect, url_for, session, flash, g, send_file
@@ -18,23 +20,58 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+# =====================================================
+# CARGA DE VARIABLES DE ENTORNO
+# Lee el archivo .env en desarrollo/local
+# En producción se configuran directamente en el servidor
+# =====================================================
+load_dotenv()
 
 # =====================================================
 # CONFIGURACIÓN PRINCIPAL DE FLASK
 # =====================================================
 app = Flask(__name__)
 
-# Clave para manejar sesiones (en producción debe ser segura)
-app.secret_key = "clave_secreta_aserve"
+# =====================================================
+# SECRET KEY
+# - Se toma desde .env o variable de entorno
+# - Es obligatoria para sesiones seguras
+# =====================================================
+app.secret_key = os.environ.get("SECRET_KEY")
 
-# Ruta de la base de datos SQLite (se guarda en /instance/aserve.db)
-app.config["DATABASE"] = os.path.join(app.instance_path, "aserve.db")
+if not app.secret_key:
+    raise RuntimeError("Falta configurar SECRET_KEY en el archivo .env o variables de entorno.")
 
-# Configuración para subida de imágenes de productos
-app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
+# =====================================================
+# BASE DE DATOS
+# - En local usa instance/aserve.db
+# - En producción puede cambiarse desde DATABASE_PATH
+# =====================================================
+database_path = os.environ.get("DATABASE_PATH", os.path.join(app.instance_path, "aserve.db"))
+
+if not os.path.isabs(database_path):
+    database_path = os.path.join(os.getcwd(), database_path)
+
+app.config["DATABASE"] = database_path
+
+# =====================================================
+# SUBIDA DE IMÁGENES
+# =====================================================
+upload_folder = os.environ.get("UPLOAD_FOLDER", os.path.join("static", "uploads"))
+app.config["UPLOAD_FOLDER"] = upload_folder
+
 app.config["ALLOWED_EXTENSIONS"] = {"png", "jpg", "jpeg", "webp"}
 
+# Límite máximo de subida: 2 MB por imagen
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
+# =====================================================
+# SEGURIDAD DE COOKIES DE SESIÓN
+# SESSION_COOKIE_SECURE debe ser 1 cuando uses HTTPS
+# =====================================================
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
 # =====================================================
 # FUNCIONES DE BASE DE DATOS
 # =====================================================
@@ -2516,8 +2553,13 @@ def order_success(order_id):
 
 
 # =====================================================
-# EJECUCIÓN
+# EJECUCIÓN LOCAL
+# En producción NO se debe usar app.run().
+# En producción se usa Gunicorn, Waitress u otro servidor WSGI.
 # =====================================================
 if __name__ == "__main__":
     os.makedirs(app.instance_path, exist_ok=True)
-    app.run(debug=True)
+
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+
+    app.run(debug=debug_mode)
