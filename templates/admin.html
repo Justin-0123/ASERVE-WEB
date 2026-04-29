@@ -6,7 +6,9 @@
 <div class="card shadow-sm border-0 admin-wrap">
   <div class="card-body p-4">
 
-    <!-- Header -->
+    <!-- =====================================================
+         HEADER DEL PANEL
+         ===================================================== -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
       <div>
         <h4 class="mb-1 fw-bold">Panel de Administración</h4>
@@ -25,13 +27,18 @@
 
     <hr class="my-4">
 
-    <!-- KPIs (opcional pero recomendado) -->
+    <!-- =====================================================
+         KPIs PRINCIPALES
+         ===================================================== -->
     <div class="row g-2 mb-3">
+
       <div class="col-6 col-lg-3">
         <div class="kpi-box border rounded-3 p-2 bg-white">
           <div class="d-flex justify-content-between align-items-center">
             <small class="text-muted">Créditos pendientes</small>
-            <span class="badge rounded-pill text-bg-success">{{ kpi_creditos|default(0) }}</span>
+            <span class="badge rounded-pill text-bg-success">
+              {{ kpi_creditos|default(0) }}
+            </span>
           </div>
         </div>
       </div>
@@ -40,7 +47,9 @@
         <div class="kpi-box border rounded-3 p-2 bg-white">
           <div class="d-flex justify-content-between align-items-center">
             <small class="text-muted">Stock bajo</small>
-            <span class="badge rounded-pill text-bg-warning text-dark">{{ kpi_stock_bajo|default(0) }}</span>
+            <span class="badge rounded-pill text-bg-warning text-dark">
+              {{ kpi_stock_bajo|default(0) }}
+            </span>
           </div>
         </div>
       </div>
@@ -49,7 +58,9 @@
         <div class="kpi-box border rounded-3 p-2 bg-white">
           <div class="d-flex justify-content-between align-items-center">
             <small class="text-muted">Usuarios bloqueados</small>
-            <span class="badge rounded-pill text-bg-dark">{{ kpi_bloqueados|default(0) }}</span>
+            <span class="badge rounded-pill text-bg-dark">
+              {{ kpi_bloqueados|default(0) }}
+            </span>
           </div>
         </div>
       </div>
@@ -57,20 +68,28 @@
       <div class="col-6 col-lg-3">
         <div class="kpi-box border rounded-3 p-2 bg-white">
           <div class="d-flex justify-content-between align-items-center">
-            <small class="text-muted">Órdenes (14 días)</small>
-            <span class="badge rounded-pill text-bg-primary">{{ kpi_ordenes_14|default(0) }}</span>
+            <small class="text-muted">Órdenes 14 días</small>
+            <span class="badge rounded-pill text-bg-primary">
+              {{ kpi_ordenes_14|default(0) }}
+            </span>
           </div>
         </div>
       </div>
+
     </div>
 
-    <!-- Grid -->
+    <!-- =====================================================
+         GRID DE ACCESOS DEL PANEL ADMIN
+         ===================================================== -->
     <div class="row g-3">
 
-      <!-- Historial -->
+      <!-- =====================================================
+           HISTORIAL
+           ===================================================== -->
       <div class="col-12 col-md-6 col-lg-4">
         <div class="card h-100 border-0 shadow-sm admin-tile">
           <div class="card-body p-3">
+
             <div class="d-flex align-items-center justify-content-between mb-2">
               <div class="d-flex align-items-center gap-3">
                 <div class="icon-circle bg-primary-subtle text-primary">🧾</div>
@@ -80,7 +99,6 @@
                 </div>
               </div>
 
-              <!-- KPI en tarjeta -->
               <span class="badge rounded-pill text-bg-primary">
                 {{ kpi_ordenes_14|default(0) }}
               </span>
@@ -90,18 +108,23 @@
               <a class="btn btn-primary btn-sm" href="{{ url_for('admin_orders') }}">
                 Historial de compras
               </a>
+
               <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin_buyers') }}">
-                Compradores (por persona)
+                Compradores por persona
               </a>
             </div>
+
           </div>
         </div>
       </div>
 
-      <!-- Créditos -->
+      <!-- =====================================================
+           CRÉDITOS
+           ===================================================== -->
       <div class="col-12 col-md-6 col-lg-4">
         <div class="card h-100 border-0 shadow-sm admin-tile">
           <div class="card-body p-3">
+
             <div class="d-flex align-items-center justify-content-between mb-2">
               <div class="d-flex align-items-center gap-3">
                 <div class="icon-circle bg-success-subtle text-success">💳</div>
@@ -111,7 +134,6 @@
                 </div>
               </div>
 
-              <!-- KPI en tarjeta -->
               <span class="badge rounded-pill text-bg-success">
                 {{ kpi_creditos|default(0) }}
               </span>
@@ -121,18 +143,23 @@
               <a class="btn btn-success btn-sm" href="{{ url_for('admin_credits') }}">
                 Créditos pendientes
               </a>
+
               <div class="text-muted small">
                 Revisar y marcar órdenes a crédito.
               </div>
             </div>
+
           </div>
         </div>
       </div>
 
-      <!-- Stock -->
+      <!-- =====================================================
+           INVENTARIO
+           ===================================================== -->
       <div class="col-12 col-md-6 col-lg-4">
         <div class="card h-100 border-0 shadow-sm admin-tile">
           <div class="card-body p-3">
+
             <div class="d-flex align-items-center justify-content-between mb-2">
               <div class="d-flex align-items-center gap-3">
                 <div class="icon-circle bg-warning-subtle text-warning">📦</div>
@@ -142,28 +169,36 @@
                 </div>
               </div>
 
-              <!-- KPI en tarjeta -->
               <span class="badge rounded-pill text-bg-warning text-dark">
                 {{ kpi_stock_bajo|default(0) }}
               </span>
             </div>
 
             <div class="d-grid gap-2">
-              <a class="btn btn-warning btn-sm text-dark" href="{{ url_for('admin_products') }}">
+              <a class="btn btn-warning btn-sm text-dark" href="{{ url_for('admin_stock') }}">
                 Stock de productos
               </a>
+
+              <a class="btn btn-outline-warning btn-sm text-dark" href="{{ url_for('admin_products') }}">
+                Gestión de productos
+              </a>
+
               <div class="text-muted small">
                 Controla productos bajos y disponibilidad.
               </div>
             </div>
+
           </div>
         </div>
       </div>
 
-      <!-- Usuarios -->
-      <div class="col-12 col-md-6">
+      <!-- =====================================================
+           USUARIOS
+           ===================================================== -->
+      <div class="col-12 col-md-6 col-lg-4">
         <div class="card h-100 border-0 shadow-sm admin-tile">
           <div class="card-body p-3">
+
             <div class="d-flex align-items-center justify-content-between mb-2">
               <div class="d-flex align-items-center gap-3">
                 <div class="icon-circle bg-dark-subtle text-dark">👥</div>
@@ -173,7 +208,6 @@
                 </div>
               </div>
 
-              <!-- KPI en tarjeta -->
               <span class="badge rounded-pill text-bg-dark">
                 {{ kpi_bloqueados|default(0) }}
               </span>
@@ -183,18 +217,23 @@
               <a class="btn btn-dark btn-sm" href="{{ url_for('admin_users') }}">
                 Gestión de usuarios
               </a>
+
               <div class="text-muted small">
-                Administra accesos y estados.
+                Administra accesos, roles y estados.
               </div>
             </div>
+
           </div>
         </div>
       </div>
 
-      <!-- Reportes -->
-      <div class="col-12 col-md-6">
+      <!-- =====================================================
+           REPORTES
+           ===================================================== -->
+      <div class="col-12 col-md-6 col-lg-4">
         <div class="card h-100 border-0 shadow-sm admin-tile">
           <div class="card-body p-3">
+
             <div class="d-flex align-items-center gap-3 mb-2">
               <div class="icon-circle bg-secondary-subtle text-secondary">📊</div>
               <div>
@@ -205,35 +244,88 @@
 
             <div class="d-grid gap-2">
               <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_report_sales') }}">
-                Reporte: ventas
+                Reporte de ventas
               </a>
+
               <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_report_top_products') }}">
-                Reporte: top productos
+                Reporte top productos
               </a>
             </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- =====================================================
+           RESPALDO
+           ===================================================== -->
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-sm admin-tile">
+          <div class="card-body p-3">
+
+            <div class="d-flex align-items-center gap-3 mb-2">
+              <div class="icon-circle bg-info-subtle text-info">💾</div>
+              <div>
+                <div class="fw-bold">Respaldo</div>
+                <small class="text-muted">Base de datos e imágenes</small>
+              </div>
+            </div>
+
+            <div class="d-grid gap-2">
+              <a class="btn btn-info btn-sm text-white"
+                 href="{{ url_for('admin_backup_download') }}">
+                Descargar respaldo
+              </a>
+
+              <div class="text-muted small">
+                Descarga un ZIP con la información del sistema.
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
 
     </div><!-- /row -->
+
   </div>
 </div>
 
+<!-- =====================================================
+     ESTILOS DEL PANEL ADMIN
+     ===================================================== -->
 <style>
-  .admin-wrap { border-radius: 16px; }
-  .admin-tile { border-radius: 14px; transition: transform .12s ease, box-shadow .12s ease; }
-  .admin-tile:hover { transform: translateY(-2px); box-shadow: 0 .6rem 1.2rem rgba(0,0,0,.10) !important; }
-
-  .icon-circle{
-    width: 44px; height: 44px; border-radius: 12px;
-    display: grid; place-items: center; font-size: 20px; flex: 0 0 auto;
+  .admin-wrap {
+    border-radius: 16px;
   }
 
-  .kpi-box { transition: box-shadow .12s ease; }
-  .kpi-box:hover { box-shadow: 0 .35rem .8rem rgba(0,0,0,.08); }
+  .admin-tile {
+    border-radius: 14px;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+
+  .admin-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 .6rem 1.2rem rgba(0,0,0,.10) !important;
+  }
+
+  .icon-circle {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    flex: 0 0 auto;
+  }
+
+  .kpi-box {
+    transition: box-shadow .12s ease;
+  }
+
+  .kpi-box:hover {
+    box-shadow: 0 .35rem .8rem rgba(0,0,0,.08);
+  }
 </style>
 
 {% endblock %}
-
-
-

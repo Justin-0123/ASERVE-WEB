@@ -4,6 +4,8 @@
 import os
 import sqlite3
 import bcrypt
+import zipfile
+import tempfile
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -118,6 +120,87 @@ def norm_text(value):
     value = value.replace("é", "e")
     return value
 
+# =====================================================
+# COMANDO CLI: BACKUP DB
+# Comando:flask --app app.py backup-db
+# Crea un respaldo ZIP local en la carpeta /backups
+# Incluye:
+# - Base de datos SQLite
+# - Imágenes subidas
+# =====================================================
+@app.cli.command("backup-db")
+def backup_db_command():
+    # Crear carpeta de respaldos si no existe
+    backup_folder = os.path.join(os.getcwd(), "backups")
+    os.makedirs(backup_folder, exist_ok=True)
+
+    # Fecha/hora para nombre del archivo
+    fecha_backup = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_filename = f"respaldo_aserve_{fecha_backup}.zip"
+    backup_path = os.path.join(backup_folder, backup_filename)
+
+    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+
+        # =====================================================
+        # 1) Respaldar base de datos SQLite de forma segura
+        # =====================================================
+        db_original_path = app.config["DATABASE"]
+
+        if os.path.exists(db_original_path):
+            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
+                temp_db_path = temp_db.name
+
+            try:
+                source = sqlite3.connect(db_original_path)
+                destination = sqlite3.connect(temp_db_path)
+
+                with destination:
+                    source.backup(destination)
+
+                source.close()
+                destination.close()
+
+                zip_file.write(
+                    temp_db_path,
+                    arcname="database/aserve.db"
+                )
+
+            finally:
+                if os.path.exists(temp_db_path):
+                    os.remove(temp_db_path)
+
+        # =====================================================
+        # 2) Respaldar imágenes subidas
+        # =====================================================
+        upload_folder = app.config["UPLOAD_FOLDER"]
+
+        if os.path.exists(upload_folder):
+            for root, dirs, files in os.walk(upload_folder):
+                for file in files:
+                    file_path = os.path.join(root, file)
+
+                    relative_path = os.path.relpath(file_path, upload_folder)
+                    zip_name = os.path.join("uploads", relative_path)
+
+                    zip_file.write(file_path, arcname=zip_name)
+
+        # =====================================================
+        # 3) Archivo informativo
+        # =====================================================
+        info = f"""RESPALDO ASERVE
+Fecha de respaldo: {fecha_backup}
+
+Contenido:
+- database/aserve.db
+- uploads/
+
+Este respaldo fue generado desde comando CLI.
+Guardar este archivo en un lugar seguro.
+"""
+        zip_file.writestr("LEEME_RESPALDO.txt", info)
+
+    print("✅ Respaldo creado correctamente.")
+    print(f"Archivo: {backup_path}")
 
 # =====================================================
 # COMANDOS DE CONSOLA (FLASK CLI)
@@ -347,6 +430,101 @@ def admin_panel():
         kpi_ordenes_14=ordenes_14
     )
 
+# =====================================================
+# ADMIN: DESCARGAR RESPALDO COMPLETO
+# Ruta: /admin/backup/download
+# - Descarga un archivo ZIP con:
+#   1) Base de datos SQLite
+#   2) Imágenes de productos subidas
+# - Solo accesible para admin
+# =====================================================
+@app.route("/admin/backup/download")
+def admin_backup_download():
+    # Seguridad: solo admin
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    # Fecha/hora para nombre del archivo
+    fecha_backup = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # ZIP en memoria
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+
+        # =====================================================
+        # 1) Respaldar base de datos usando backup seguro SQLite
+        # =====================================================
+        db_original_path = app.config["DATABASE"]
+
+        if os.path.exists(db_original_path):
+            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
+                temp_db_path = temp_db.name
+
+            try:
+                # Copia segura de la DB incluso si la app está abierta
+                source = sqlite3.connect(db_original_path)
+                destination = sqlite3.connect(temp_db_path)
+
+                with destination:
+                    source.backup(destination)
+
+                source.close()
+                destination.close()
+
+                # Agregar DB al ZIP
+                zip_file.write(
+                    temp_db_path,
+                    arcname="database/aserve.db"
+                )
+
+            finally:
+                # Borrar copia temporal
+                if os.path.exists(temp_db_path):
+                    os.remove(temp_db_path)
+
+        # =====================================================
+        # 2) Respaldar imágenes subidas
+        # =====================================================
+        upload_folder = app.config["UPLOAD_FOLDER"]
+
+        if os.path.exists(upload_folder):
+            for root, dirs, files in os.walk(upload_folder):
+                for file in files:
+                    file_path = os.path.join(root, file)
+
+                    # Ruta relativa dentro del ZIP
+                    relative_path = os.path.relpath(file_path, upload_folder)
+                    zip_name = os.path.join("uploads", relative_path)
+
+                    zip_file.write(file_path, arcname=zip_name)
+
+        # =====================================================
+        # 3) Agregar archivo informativo
+        # =====================================================
+        info = f"""RESPALDO ASERVE
+Fecha de respaldo: {fecha_backup}
+
+Contenido:
+- database/aserve.db
+- uploads/
+
+Notas:
+Este archivo contiene la base de datos y las imágenes subidas al sistema.
+Guardarlo en un lugar seguro.
+"""
+        zip_file.writestr("LEEME_RESPALDO.txt", info)
+
+    zip_buffer.seek(0)
+
+    filename = f"respaldo_aserve_{fecha_backup}.zip"
+
+    return send_file(
+        zip_buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/zip"
+    )
 
 # =====================================================
 # ADMIN: USUARIOS (LISTA)
