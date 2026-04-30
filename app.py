@@ -6,6 +6,9 @@ import sqlite3
 import bcrypt
 import zipfile
 import tempfile
+import shutil
+import click
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -43,6 +46,22 @@ app.secret_key = os.environ.get("SECRET_KEY")
 
 if not app.secret_key:
     raise RuntimeError("Falta configurar SECRET_KEY en el archivo .env o variables de entorno.")
+
+# =====================================================
+# PROTECCIÓN CSRF
+# Protege formularios POST contra envíos externos maliciosos.
+# Requiere SECRET_KEY configurada.
+# =====================================================
+csrf = CSRFProtect(app)
+
+# =====================================================
+# ERROR CSRF
+# Si el token CSRF falta o es inválido, muestra mensaje claro.
+# =====================================================
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    flash("La sesión del formulario expiró o no es válida. Intenta nuevamente.", "warning")
+    return redirect(request.referrer or url_for("inicio"))
 
 # =====================================================
 # BASE DE DATOS
@@ -201,6 +220,169 @@ Guardar este archivo en un lugar seguro.
 
     print("✅ Respaldo creado correctamente.")
     print(f"Archivo: {backup_path}")
+
+# =====================================================
+# COMANDO CLI: RESTAURAR RESPALDO
+# Comando:
+# flask --app app.py restore-backup "backups/respaldo_aserve_XXXX.zip"
+#
+# IMPORTANTE:
+# - Detener Flask antes de restaurar.
+# - Reemplaza la base actual y las imágenes actuales.
+# - Antes de restaurar crea un respaldo automático de emergencia.
+# =====================================================
+@app.cli.command("restore-backup")
+@click.argument("zip_path")
+def restore_backup_command(zip_path):
+    # -----------------------------------------------------
+    # 1) Validar que el ZIP exista
+    # -----------------------------------------------------
+    if not os.path.exists(zip_path):
+        print("❌ El archivo ZIP no existe.")
+        print(f"Ruta recibida: {zip_path}")
+        return
+
+    # -----------------------------------------------------
+    # 2) Validar que sea un ZIP correcto
+    # -----------------------------------------------------
+    if not zipfile.is_zipfile(zip_path):
+        print("❌ El archivo indicado no es un ZIP válido.")
+        return
+
+    # -----------------------------------------------------
+    # 3) Preparar rutas
+    # -----------------------------------------------------
+    db_path = app.config["DATABASE"]
+    db_folder = os.path.dirname(db_path)
+
+    upload_folder = app.config["UPLOAD_FOLDER"]
+
+    # Si upload_folder es relativo, convertirlo a ruta absoluta
+    if not os.path.isabs(upload_folder):
+        upload_folder = os.path.join(os.getcwd(), upload_folder)
+
+    os.makedirs(db_folder, exist_ok=True)
+    os.makedirs(upload_folder, exist_ok=True)
+
+    fecha_restore = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # -----------------------------------------------------
+    # 4) Crear respaldo de emergencia antes de restaurar
+    # -----------------------------------------------------
+    backup_folder = os.path.join(os.getcwd(), "backups")
+    os.makedirs(backup_folder, exist_ok=True)
+
+    pre_backup_path = os.path.join(
+        backup_folder,
+        f"pre_restore_aserve_{fecha_restore}.zip"
+    )
+
+    print("🟡 Creando respaldo de emergencia antes de restaurar...")
+
+    with zipfile.ZipFile(pre_backup_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+
+        # Copia segura de la DB actual
+        if os.path.exists(db_path):
+            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
+                temp_db_path = temp_db.name
+
+            try:
+                source = sqlite3.connect(db_path)
+                destination = sqlite3.connect(temp_db_path)
+
+                with destination:
+                    source.backup(destination)
+
+                source.close()
+                destination.close()
+
+                zip_file.write(
+                    temp_db_path,
+                    arcname="database/aserve.db"
+                )
+
+            finally:
+                if os.path.exists(temp_db_path):
+                    os.remove(temp_db_path)
+
+        # Copia de uploads actuales
+        if os.path.exists(upload_folder):
+            for root, dirs, files in os.walk(upload_folder):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(file_path, upload_folder)
+                    zip_name = os.path.join("uploads", relative_path)
+                    zip_file.write(file_path, arcname=zip_name)
+
+        info = f"""RESPALDO DE EMERGENCIA ASERVE
+Fecha: {fecha_restore}
+
+Este respaldo fue creado automáticamente antes de restaurar otro respaldo.
+
+Contenido:
+- database/aserve.db
+- uploads/
+"""
+        zip_file.writestr("LEEME_PRE_RESTORE.txt", info)
+
+    print(f"✅ Respaldo de emergencia creado: {pre_backup_path}")
+
+    # -----------------------------------------------------
+    # 5) Extraer ZIP de respaldo en carpeta temporal
+    # -----------------------------------------------------
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(temp_dir)
+
+        restored_db = os.path.join(temp_dir, "database", "aserve.db")
+        restored_uploads = os.path.join(temp_dir, "uploads")
+
+        # -------------------------------------------------
+        # 6) Validar que el respaldo tenga base de datos
+        # -------------------------------------------------
+        if not os.path.exists(restored_db):
+            print("❌ El respaldo no contiene database/aserve.db.")
+            print("No se restauró nada.")
+            print(f"Tu respaldo de emergencia quedó en: {pre_backup_path}")
+            return
+
+        # -------------------------------------------------
+        # 7) Restaurar base de datos
+        # -------------------------------------------------
+        print("🟡 Restaurando base de datos...")
+
+        # Si existe la DB actual, reemplazarla
+        if os.path.exists(db_path):
+            os.remove(db_path)
+
+        shutil.copy2(restored_db, db_path)
+
+        print("✅ Base de datos restaurada correctamente.")
+
+        # -------------------------------------------------
+        # 8) Restaurar imágenes/uploads
+        # -------------------------------------------------
+        print("🟡 Restaurando imágenes...")
+
+        # Borrar uploads actuales
+        if os.path.exists(upload_folder):
+            shutil.rmtree(upload_folder)
+
+        # Si el respaldo trae uploads, copiarlos
+        if os.path.exists(restored_uploads):
+            shutil.copytree(restored_uploads, upload_folder)
+            print("✅ Imágenes restauradas correctamente.")
+        else:
+            os.makedirs(upload_folder, exist_ok=True)
+            print("⚠️ El respaldo no tenía carpeta uploads. Se creó vacía.")
+
+    print("")
+    print("✅ RESTAURACIÓN COMPLETADA CORRECTAMENTE")
+    print(f"Respaldo restaurado: {zip_path}")
+    print(f"Respaldo de emergencia previo: {pre_backup_path}")
+    print("")
+    print("Ahora podés iniciar Flask nuevamente con:")
+    print("python app.py")
 
 # =====================================================
 # COMANDOS DE CONSOLA (FLASK CLI)
@@ -682,6 +864,61 @@ def admin_user_toggle(user_id):
     flash(f"Estado actualizado a: {nuevo_estado}", "success")
     return redirect(url_for("admin_users"))
 
+# =====================================================
+# ADMIN: USUARIOS (ELIMINAR)
+# - Solo elimina usuarios sin historial de compras
+# - Si tiene órdenes, se debe bloquear para conservar trazabilidad
+# =====================================================
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+def admin_user_delete(user_id):
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    # Evitar que el admin se elimine a sí mismo
+    if session.get("user_id") == user_id:
+        flash("No podés eliminar tu propia cuenta.", "warning")
+        return redirect(url_for("admin_users"))
+
+    db = get_db()
+
+    user = db.execute(
+        "SELECT id, nombre, usuario, rol FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+
+    if not user:
+        flash("Usuario no encontrado.", "danger")
+        return redirect(url_for("admin_users"))
+
+    # Verificar si tiene compras registradas
+    compras = db.execute(
+        "SELECT COUNT(*) AS total FROM orders WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()["total"]
+
+    if compras > 0:
+        flash(
+            "No se puede eliminar este usuario porque tiene compras registradas. "
+            "Podés bloquearlo para impedir el acceso y conservar el historial.",
+            "warning"
+        )
+        return redirect(url_for("admin_users"))
+
+    # Evitar eliminar el último administrador
+    if user["rol"] == "admin":
+        admins = db.execute(
+            "SELECT COUNT(*) AS total FROM users WHERE rol = 'admin'"
+        ).fetchone()["total"]
+
+        if admins <= 1:
+            flash("No se puede eliminar el último administrador del sistema.", "warning")
+            return redirect(url_for("admin_users"))
+
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+
+    flash(f"Usuario '{user['nombre']}' eliminado correctamente.", "success")
+    return redirect(url_for("admin_users"))
 
 # =====================================================
 # MIS COMPRAS (HISTORIAL DEL USUARIO LOGUEADO)

@@ -31,10 +31,17 @@
     <!-- =====================================================
          BOTÓN: NUEVO PRODUCTO
          Lleva al formulario /admin/products/add
-         ===================================================== -->
-    <a href="{{ url_for('admin_product_add') }}" class="btn btn-primary btn-sm">+ Nuevo producto
+      ===================================================== -->
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-secondary btn-sm">
+      Volver
     </a>
 
+    <a href="{{ url_for('admin_product_add') }}" class="btn btn-primary btn-sm">
+      + Nuevo producto
+    </a>
+  </div>
+</div>
     <!-- =====================================================
          TABLA DE PRODUCTOS
          Muestra listado con imagen, stock mínimo y botón editar

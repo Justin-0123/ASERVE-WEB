@@ -66,26 +66,31 @@
               {% endif %}
             </td>
 
-            <!-- Acciones -->
-            <td class="d-flex flex-wrap gap-2">
-              <a class="btn btn-outline-primary btn-sm"
-                 href="{{ url_for('admin_user_edit', user_id=u.id) }}">
-                Editar
-              </a>
+      <!-- Acciones -->
+        <td class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary btn-sm"
+          href="{{ url_for('admin_user_edit', user_id=u.id) }}">
+        Editar
+      </a>
 
-              <form method="POST"
-                    action="{{ url_for('admin_user_toggle', user_id=u.id) }}"
-                    onsubmit="return confirm('¿Cambiar estado de este usuario?');">
-                <button type="submit"
-                        class="btn btn-outline-danger btn-sm">
-                  {% if u.estado == "activo" %}
-                    Bloquear
-                  {% else %}
-                    Activar
-                  {% endif %}
-                </button>
-              </form>
-            </td>
+      <form method="POST"
+        action="{{ url_for('admin_user_toggle', user_id=u.id) }}"
+        onsubmit="return confirm('¿Cambiar estado de este usuario?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-warning btn-sm">
+          {% if u.estado == "activo" %}Bloquear{% else %}Activar{% endif %}
+          </button>
+        </form>
+
+        <form method="POST"
+            action="{{ url_for('admin_user_delete', user_id=u.id) }}"
+            onsubmit="return confirm('¿Seguro que querés eliminar este usuario? Esta acción no se puede deshacer.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-danger btn-sm">
+            Eliminar
+          </button>
+        </form>
+      </td>
           </tr>
 
           {% else %}

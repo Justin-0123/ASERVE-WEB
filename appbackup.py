@@ -81,6 +81,34 @@ def norm_text(value):
     value = value.replace("é", "e")
     return value
 
+# =====================================================
+# FUNCIÓN AUXILIAR: VALIDAR CONTRASEÑAS
+# Reglas:
+# - mínimo 8 caracteres
+# - al menos una mayúscula
+# - al menos una minúscula
+# - al menos un número
+# =====================================================
+def validar_contrasena_segura(password):
+    errores = []
+
+    if not password:
+        errores.append("La contraseña no puede estar vacía.")
+        return errores
+
+    if len(password) < 8:
+        errores.append("Debe tener al menos 8 caracteres.")
+
+    if not any(c.isupper() for c in password):
+        errores.append("Debe incluir al menos una letra mayúscula.")
+
+    if not any(c.islower() for c in password):
+        errores.append("Debe incluir al menos una letra minúscula.")
+
+    if not any(c.isdigit() for c in password):
+        errores.append("Debe incluir al menos un número.")
+
+    return errores
 
 # =====================================================
 # COMANDOS DE CONSOLA (FLASK CLI)
@@ -208,6 +236,7 @@ def perfil():
 
     db = get_db()
     user_id = session["user_id"]
+
     user = db.execute(
         "SELECT id, nombre, usuario, rol, estado FROM users WHERE id = ?",
         (user_id,)
@@ -231,10 +260,13 @@ def perfil():
             flash("La nueva contraseña y su confirmación no coinciden.", "danger")
             return redirect(url_for("perfil"))
 
-        if len(nueva) < 6:
-            flash("La nueva contraseña debe tener al menos 6 caracteres.", "warning")
+        # Validar seguridad de la nueva contraseña
+        errores_password = validar_contrasena_segura(nueva)
+        if errores_password:
+            flash(" ".join(errores_password), "warning")
             return redirect(url_for("perfil"))
 
+        # Verificar contraseña actual
         user_full = db.execute(
             "SELECT contrasena_hash FROM users WHERE id = ?",
             (user_id,)
@@ -247,7 +279,11 @@ def perfil():
             flash("La contraseña actual no es correcta.", "danger")
             return redirect(url_for("perfil"))
 
-        nuevo_hash = bcrypt.hashpw(nueva.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        nuevo_hash = bcrypt.hashpw(
+            nueva.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
         db.execute(
             "UPDATE users SET contrasena_hash = ? WHERE id = ?",
             (nuevo_hash, user_id)
@@ -258,8 +294,7 @@ def perfil():
         return redirect(url_for("perfil"))
 
     return render_template("perfil.html", user=user)
-
-
+    
 # =====================================================
 # PANEL ADMINISTRADOR
 # =====================================================
@@ -351,19 +386,34 @@ def admin_user_add():
             flash("Nombre, usuario y contraseña son obligatorios.", "danger")
             return redirect(url_for("admin_user_add"))
 
+        errores_password = validar_contrasena_segura(password)
+        if errores_password:
+            flash(" ".join(errores_password), "warning")
+            return redirect(url_for("admin_user_add"))
+
         if rol not in ("admin", "asociado"):
             flash("Rol inválido.", "danger")
             return redirect(url_for("admin_user_add"))
 
-        existe = db.execute("SELECT id FROM users WHERE usuario = ?", (usuario,)).fetchone()
+        existe = db.execute(
+            "SELECT id FROM users WHERE usuario = ?",
+            (usuario,)
+        ).fetchone()
+
         if existe:
             flash("Ese usuario ya existe.", "warning")
             return redirect(url_for("admin_user_add"))
 
-        hash_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        hash_pw = bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
 
         db.execute(
-            "INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado) VALUES (?, ?, ?, ?, 'activo')",
+            """
+            INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado)
+            VALUES (?, ?, ?, ?, 'activo')
+            """,
             (nombre, usuario, hash_pw, rol)
         )
         db.commit()
@@ -383,6 +433,7 @@ def admin_user_edit(user_id):
         return redirect(url_for("login"))
 
     db = get_db()
+
     u = db.execute(
         "SELECT id, nombre, usuario, rol, estado FROM users WHERE id = ?",
         (user_id,)
@@ -415,6 +466,7 @@ def admin_user_edit(user_id):
             "SELECT id FROM users WHERE usuario = ? AND id <> ?",
             (usuario, user_id)
         ).fetchone()
+
         if existe:
             flash("Ese usuario ya está en uso por otra cuenta.", "warning")
             return redirect(url_for("admin_user_edit", user_id=user_id))
@@ -428,19 +480,30 @@ def admin_user_edit(user_id):
             (nombre, usuario, rol, estado, user_id)
         )
 
+        # Si el admin escribe una nueva contraseña, se valida y se actualiza
         if new_password:
-            hash_pw = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            errores_password = validar_contrasena_segura(new_password)
+
+            if errores_password:
+                flash(" ".join(errores_password), "warning")
+                return redirect(url_for("admin_user_edit", user_id=user_id))
+
+            hash_pw = bcrypt.hashpw(
+                new_password.encode("utf-8"),
+                bcrypt.gensalt()
+            ).decode("utf-8")
+
             db.execute(
                 "UPDATE users SET contrasena_hash = ? WHERE id = ?",
                 (hash_pw, user_id)
             )
 
         db.commit()
+
         flash("Usuario actualizado correctamente.", "success")
         return redirect(url_for("admin_users"))
 
     return render_template("admin_user_edit.html", u=u)
-
 
 # =====================================================
 # ADMIN: USUARIOS (BLOQUEAR / DESBLOQUEAR)

@@ -5,7 +5,9 @@
 <div class="card shadow-sm">
   <div class="card-body">
 
-    <!-- Encabezado -->
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
     <div class="d-flex justify-content-between align-items-center mb-2">
       <div>
         <h5 class="mb-0">Mi perfil</h5>
@@ -13,13 +15,19 @@
       </div>
 
       {% if session.get("rol") == "admin" %}
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">Ir al panel admin</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">
+          Ir al panel admin
+        </a>
       {% else %}
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('catalogo') }}">Volver al catálogo</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('catalogo') }}">
+          Volver al catálogo
+        </a>
       {% endif %}
     </div>
 
-    <!-- Datos del usuario -->
+    <!-- =====================================================
+         DATOS DEL USUARIO
+         ===================================================== -->
     <div class="row g-2 mb-3">
       <div class="col-12 col-md-6">
         <div class="border rounded p-2">
@@ -27,12 +35,14 @@
           <div class="fw-bold">{{ user.nombre }}</div>
         </div>
       </div>
+
       <div class="col-6 col-md-3">
         <div class="border rounded p-2">
           <div class="small text-muted">Usuario</div>
           <div class="fw-bold">{{ user.usuario }}</div>
         </div>
       </div>
+
       <div class="col-6 col-md-3">
         <div class="border rounded p-2">
           <div class="small text-muted">Rol</div>
@@ -41,7 +51,9 @@
       </div>
     </div>
 
-    <!-- Acceso a historial -->
+    <!-- =====================================================
+         ACCESO A HISTORIAL DE COMPRAS
+         ===================================================== -->
     <div class="d-flex flex-wrap gap-2 mb-3">
       <a class="btn btn-outline-primary btn-sm" href="{{ url_for('mis_compras') }}">
         Ver mis compras
@@ -50,25 +62,58 @@
 
     <hr>
 
-    <!-- Cambiar contraseña -->
+    <!-- =====================================================
+         CAMBIAR CONTRASEÑA
+         ===================================================== -->
     <h6 class="mb-2">Cambiar contraseña</h6>
-    <form method="POST">
+
+    <form method="POST" action="{{ url_for('perfil') }}">
+
+      <!-- Token CSRF manual por seguridad adicional -->
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
       <div class="row g-2">
+
         <div class="col-12 col-md-4">
           <label class="form-label">Contraseña actual</label>
-          <input class="form-control form-control-sm" type="password" name="password_actual" required>
+          <input
+            class="form-control form-control-sm"
+            type="password"
+            name="password_actual"
+            required
+            autocomplete="current-password"
+          >
         </div>
 
         <div class="col-12 col-md-4">
           <label class="form-label">Nueva contraseña</label>
-          <input class="form-control form-control-sm" type="password" name="password_nueva" required>
-          <small class="text-muted">Mínimo 6 caracteres</small>
+          <input
+            class="form-control form-control-sm"
+            type="password"
+            name="password_nueva"
+            required
+            minlength="8"
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
+            title="Debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número."
+            autocomplete="new-password"
+          >
+          <small class="text-muted">
+            Mínimo 8 caracteres, una mayúscula, una minúscula y un número.
+          </small>
         </div>
 
         <div class="col-12 col-md-4">
           <label class="form-label">Confirmar nueva</label>
-          <input class="form-control form-control-sm" type="password" name="password_confirmar" required>
+          <input
+            class="form-control form-control-sm"
+            type="password"
+            name="password_confirmar"
+            required
+            minlength="8"
+            autocomplete="new-password"
+          >
         </div>
+
       </div>
 
       <button class="btn btn-success btn-sm mt-3" type="submit">
