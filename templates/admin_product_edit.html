@@ -5,63 +5,182 @@
 <div class="card shadow-sm">
   <div class="card-body">
 
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <div>
         <h5 class="mb-0">Editar producto</h5>
         <small class="text-muted">ID: {{ p.id }}</small>
       </div>
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">Volver</a>
+
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+        Volver
+      </a>
     </div>
 
+    <!-- =====================================================
+         FORMULARIO PRINCIPAL DE EDICIÓN
+         ===================================================== -->
     <form method="POST" enctype="multipart/form-data" class="row g-3">
 
+      <!-- CSRF -->
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <!-- Nombre -->
       <div class="col-12 col-md-6">
         <label class="form-label">Nombre</label>
-        <input type="text" name="nombre" class="form-control" value="{{ p.nombre }}" required>
+        <input
+          type="text"
+          name="nombre"
+          class="form-control"
+          value="{{ p.nombre }}"
+          required
+        >
       </div>
 
+      <!-- Precio -->
       <div class="col-12 col-md-3">
         <label class="form-label">Precio</label>
-        <input type="number" step="0.01" min="0" name="precio" class="form-control" value="{{ p.precio }}" required>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          name="precio"
+          class="form-control"
+          value="{{ p.precio }}"
+          required
+        >
       </div>
 
+      <!-- Stock -->
       <div class="col-12 col-md-3">
         <label class="form-label">Stock</label>
-        <input type="number" min="0" name="stock" class="form-control" value="{{ p.stock }}" required>
+        <input
+          type="number"
+          min="0"
+          name="stock"
+          class="form-control"
+          value="{{ p.stock }}"
+          required
+        >
       </div>
 
+      <!-- Stock mínimo -->
       <div class="col-12 col-md-3">
         <label class="form-label">Stock mínimo</label>
-        <input type="number" min="0" name="stock_minimo" class="form-control" value="{{ p.stock_minimo }}">
+        <input
+          type="number"
+          min="0"
+          name="stock_minimo"
+          class="form-control"
+          value="{{ p.stock_minimo }}"
+        >
       </div>
 
+      <!-- Estado activo -->
       <div class="col-12 col-md-3 d-flex align-items-end">
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="activo" id="activo"
-                 {% if p.activo == 1 %}checked{% endif %}>
-          <label class="form-check-label" for="activo">Activo</label>
+        <div class="form-check mb-2">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            name="activo"
+            id="activo"
+            {% if p.activo == 1 %}checked{% endif %}
+          >
+          <label class="form-check-label" for="activo">
+            Activo
+          </label>
         </div>
       </div>
 
+      <!-- Imagen -->
       <div class="col-12 col-md-6">
-        <label class="form-label">Imagen (opcional)</label>
-        <input class="form-control" type="file" name="imagen" accept=".png,.jpg,.jpeg,.webp">
+        <label class="form-label">Imagen nueva opcional</label>
+        <input
+          class="form-control"
+          type="file"
+          name="imagen"
+          accept=".png,.jpg,.jpeg,.webp"
+        >
+
+        <small class="text-muted">
+          Formatos permitidos: PNG, JPG, JPEG o WEBP. Máximo 2 MB.
+        </small>
+
         {% if p.image_filename %}
-          <div class="mt-2">
-            <small class="text-muted d-block mb-1">Actual:</small>
-            <img src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
-                 style="width:110px;height:110px;object-fit:cover;border-radius:10px;border:1px solid #ddd;"
-                 alt="Imagen actual">
+          <div class="mt-3">
+            <small class="text-muted d-block mb-1">Imagen actual:</small>
+
+            <img
+              src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
+              style="width:110px;height:110px;object-fit:contain;border-radius:10px;border:1px solid #ddd;background:#fff;"
+              alt="Imagen actual"
+            >
+
+            <div class="mt-2">
+              <button
+                type="submit"
+                class="btn btn-outline-danger btn-sm"
+                formaction="{{ url_for('admin_product_image_delete', product_id=p.id) }}"
+                formmethod="POST"
+                formnovalidate
+                onclick="return confirm('¿Seguro que deseas eliminar la imagen de este producto?');">
+                Eliminar imagen
+              </button>
+            </div>
+          </div>
+        {% else %}
+          <div class="mt-3 text-muted small">
+            Este producto no tiene imagen registrada.
           </div>
         {% endif %}
       </div>
 
-      <div class="col-12 d-flex gap-2">
-        <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">Cancelar</a>
+      <!-- Botones principales -->
+      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+        <button type="submit" class="btn btn-primary btn-sm">
+          Guardar cambios
+        </button>
+
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+          Cancelar
+        </a>
       </div>
 
     </form>
+
+    <!-- =====================================================
+         ZONA DE ELIMINACIÓN DEL PRODUCTO
+         Solo se eliminará si no tiene ventas ni movimientos.
+         ===================================================== -->
+    <hr class="my-4">
+
+    <div class="border rounded p-3 bg-light">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+
+        <div>
+          <h6 class="mb-1 text-danger">Eliminar producto</h6>
+          <small class="text-muted">
+            Solo se podrá eliminar si no tiene ventas ni movimientos registrados.
+            Si ya tiene historial, se debe dejar inactivo.
+          </small>
+        </div>
+
+        <form
+          method="POST"
+          action="{{ url_for('admin_product_delete', product_id=p.id) }}"
+          onsubmit="return confirm('¿Seguro que deseas eliminar este producto? Solo se eliminará si no tiene historial de ventas o movimientos.');">
+
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <button type="submit" class="btn btn-outline-danger btn-sm">
+            Eliminar producto
+          </button>
+        </form>
+
+      </div>
+    </div>
 
   </div>
 </div>

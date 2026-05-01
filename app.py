@@ -21,6 +21,7 @@ from flask import (
 
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -76,6 +77,13 @@ app.config["ALLOWED_EXTENSIONS"] = {"png", "jpg", "jpeg", "webp"}
 # Límite máximo de subida: 2 MB
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
+# =====================================================
+# ERROR: IMAGEN DEMASIADO PESADA
+# =====================================================
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(e):
+    flash("El archivo es demasiado pesado. La imagen no debe superar los 2 MB.", "warning")
+    return redirect(request.referrer or url_for("admin_products"))
 
 # =====================================================
 # SEGURIDAD DE COOKIES
@@ -2340,18 +2348,34 @@ def admin_product_add():
             stock_minimo_num = int(stock_minimo)
 
             if precio_num < 0 or stock_num < 0 or stock_minimo_num < 0:
-                flash("Precio/stock no pueden ser negativos.", "danger")
+                flash("Precio, stock y stock mínimo no pueden ser negativos.", "danger")
                 return redirect(url_for("admin_product_add"))
 
         except ValueError:
             flash("Precio debe ser número y stock/stock mínimo deben ser enteros.", "danger")
             return redirect(url_for("admin_product_add"))
 
+        db = get_db()
+
+        # Evitar productos duplicados por nombre
+        existe = db.execute(
+            """
+            SELECT id
+            FROM products
+            WHERE lower(trim(nombre)) = lower(trim(?))
+            """,
+            (nombre,)
+        ).fetchone()
+
+        if existe:
+            flash("Ya existe un producto con ese nombre. Revisá la gestión de productos antes de crearlo nuevamente.", "warning")
+            return redirect(url_for("admin_product_add"))
+
         image_filename = None
 
         if imagen and imagen.filename:
             if not allowed_file(imagen.filename):
-                flash("Formato de imagen no permitido.", "danger")
+                flash("Formato de imagen no permitido. Usá PNG, JPG, JPEG o WEBP.", "danger")
                 return redirect(url_for("admin_product_add"))
 
             filename_img = secure_filename(imagen.filename)
@@ -2362,8 +2386,6 @@ def admin_product_add():
 
             imagen.save(os.path.join(upload_folder_abs, unique_name))
             image_filename = unique_name
-
-        db = get_db()
 
         db.execute(
             """
@@ -2380,11 +2402,10 @@ def admin_product_add():
 
         db.commit()
 
-        flash("✅ Producto agregado.", "success")
+        flash("✅ Producto agregado correctamente.", "success")
         return redirect(url_for("admin_products"))
 
     return render_template("admin_product_add.html")
-
 
 @app.route("/admin/products/<int:product_id>/edit", methods=["GET", "POST"])
 def admin_product_edit(product_id):
@@ -2424,18 +2445,33 @@ def admin_product_edit(product_id):
             stock_minimo_num = int(stock_minimo)
 
             if precio_num < 0 or stock_num < 0 or stock_minimo_num < 0:
-                flash("Precio/stock no pueden ser negativos.", "danger")
+                flash("Precio, stock y stock mínimo no pueden ser negativos.", "danger")
                 return redirect(url_for("admin_product_edit", product_id=product_id))
 
         except ValueError:
             flash("Precio debe ser número y stock/stock mínimo deben ser enteros.", "danger")
             return redirect(url_for("admin_product_edit", product_id=product_id))
 
+        # Evitar duplicar nombre con otro producto
+        existe = db.execute(
+            """
+            SELECT id
+            FROM products
+            WHERE lower(trim(nombre)) = lower(trim(?))
+              AND id <> ?
+            """,
+            (nombre, product_id)
+        ).fetchone()
+
+        if existe:
+            flash("Ya existe otro producto con ese nombre. Usá un nombre diferente.", "warning")
+            return redirect(url_for("admin_product_edit", product_id=product_id))
+
         image_filename = p["image_filename"]
 
         if imagen and imagen.filename:
             if not allowed_file(imagen.filename):
-                flash("Formato de imagen no permitido.", "danger")
+                flash("Formato de imagen no permitido. Usá PNG, JPG, JPEG o WEBP.", "danger")
                 return redirect(url_for("admin_product_edit", product_id=product_id))
 
             filename_img = secure_filename(imagen.filename)
@@ -2463,11 +2499,160 @@ def admin_product_edit(product_id):
 
         db.commit()
 
-        flash("✅ Producto actualizado.", "success")
+        flash("✅ Producto actualizado correctamente.", "success")
         return redirect(url_for("admin_products"))
 
     return render_template("admin_product_edit.html", p=p)
 
+# =====================================================
+# ADMIN: ELIMINAR IMAGEN DE PRODUCTO
+# - Elimina la imagen física del producto
+# - Deja image_filename en NULL
+# =====================================================
+@app.route("/admin/products/<int:product_id>/image/delete", methods=["POST"])
+def admin_product_image_delete(product_id):
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    db = get_db()
+
+    p = db.execute(
+        """
+        SELECT id, nombre, image_filename
+        FROM products
+        WHERE id = ?
+        """,
+        (product_id,)
+    ).fetchone()
+
+    if not p:
+        flash("Producto no encontrado.", "danger")
+        return redirect(url_for("admin_products"))
+
+    if not p["image_filename"]:
+        flash("Este producto no tiene imagen para eliminar.", "warning")
+        return redirect(url_for("admin_product_edit", product_id=product_id))
+
+    upload_folder_abs = app.config["UPLOAD_FOLDER"]
+
+    if not os.path.isabs(upload_folder_abs):
+        upload_folder_abs = os.path.join(os.getcwd(), upload_folder_abs)
+
+    image_path = os.path.join(
+        upload_folder_abs,
+        os.path.basename(p["image_filename"])
+    )
+
+    if os.path.exists(image_path):
+        try:
+            os.remove(image_path)
+        except OSError as e:
+            print("Error eliminando imagen:", e)
+            flash("No se pudo eliminar el archivo de imagen.", "danger")
+            return redirect(url_for("admin_product_edit", product_id=product_id))
+
+    db.execute(
+        """
+        UPDATE products
+        SET image_filename = NULL
+        WHERE id = ?
+        """,
+        (product_id,)
+    )
+
+    registrar_auditoria(
+        "Eliminar imagen producto",
+        f"Producto ID {product_id}. Producto: {p['nombre']}. Se eliminó la imagen asociada."
+    )
+
+    db.commit()
+
+    flash("Imagen eliminada correctamente.", "success")
+    return redirect(url_for("admin_product_edit", product_id=product_id))
+
+# =====================================================
+# ADMIN: ELIMINAR PRODUCTO
+# - Solo elimina productos sin ventas ni movimientos
+# - Si tiene historial, se debe desactivar
+# =====================================================
+@app.route("/admin/products/<int:product_id>/delete", methods=["POST"])
+def admin_product_delete(product_id):
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    db = get_db()
+
+    p = db.execute(
+        """
+        SELECT id, nombre, image_filename
+        FROM products
+        WHERE id = ?
+        """,
+        (product_id,)
+    ).fetchone()
+
+    if not p:
+        flash("Producto no encontrado.", "danger")
+        return redirect(url_for("admin_products"))
+
+    ventas = db.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM order_items
+        WHERE product_id = ?
+        """,
+        (product_id,)
+    ).fetchone()["total"]
+
+    movimientos = db.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM stock_movements
+        WHERE product_id = ?
+        """,
+        (product_id,)
+    ).fetchone()["total"]
+
+    if ventas > 0 or movimientos > 0:
+        flash(
+            "No se puede eliminar este producto porque ya tiene ventas o movimientos registrados. "
+            "Para conservar el historial, podés dejarlo inactivo.",
+            "warning"
+        )
+        return redirect(url_for("admin_products"))
+
+    # Eliminar imagen física si existe
+    if p["image_filename"]:
+        upload_folder_abs = app.config["UPLOAD_FOLDER"]
+
+        if not os.path.isabs(upload_folder_abs):
+            upload_folder_abs = os.path.join(os.getcwd(), upload_folder_abs)
+
+        image_path = os.path.join(
+            upload_folder_abs,
+            os.path.basename(p["image_filename"])
+        )
+
+        if os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except OSError as e:
+                print("Error eliminando imagen del producto:", e)
+
+    db.execute(
+        "DELETE FROM products WHERE id = ?",
+        (product_id,)
+    )
+
+    registrar_auditoria(
+        "Eliminar producto",
+        f"Producto ID {product_id}. Producto: {p['nombre']}. Eliminado porque no tenía ventas ni movimientos registrados."
+    )
+
+    db.commit()
+
+    flash(f"Producto '{p['nombre']}' eliminado correctamente.", "success")
+    return redirect(url_for("admin_products"))
 
 # =====================================================
 # REPORTES

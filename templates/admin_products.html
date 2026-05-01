@@ -6,20 +6,35 @@
   <div class="card-body">
 
     <!-- =====================================================
-         TÍTULO DEL MÓDULO
-         Pantalla principal del administrador para gestionar productos
+         ENCABEZADO DEL MÓDULO
          ===================================================== -->
-    <h4 class="mb-3">Gestión de Productos</h4>
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+      <div>
+        <h4 class="mb-0">Gestión de Productos</h4>
+        <small class="text-muted">
+          Administra productos, precios, stock, imágenes y estado
+        </small>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-secondary btn-sm">
+          Volver
+        </a>
+
+        <a href="{{ url_for('admin_product_add') }}" class="btn btn-primary btn-sm">
+          + Nuevo producto
+        </a>
+      </div>
+    </div>
 
     <!-- =====================================================
-         ALERTA SUPERIOR
-         Se muestra si hay productos con stock <= stock_minimo
-         (solo cuando stock_minimo > 0 y el producto está activo)
+         ALERTA DE STOCK BAJO
          ===================================================== -->
     {% if bajos and bajos|length > 0 %}
       <div class="alert alert-danger">
         <b>Alerta de stock:</b>
         Hay {{ bajos|length }} producto(s) que requieren reposición:
+
         {% for b in bajos %}
           <span class="badge bg-light text-dark">
             {{ b.nombre }} ({{ b.stock }})
@@ -29,84 +44,59 @@
     {% endif %}
 
     <!-- =====================================================
-         BOTÓN: NUEVO PRODUCTO
-         Lleva al formulario /admin/products/add
-      ===================================================== -->
-  <div class="d-flex gap-2">
-    <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-secondary btn-sm">
-      Volver
-    </a>
-
-    <a href="{{ url_for('admin_product_add') }}" class="btn btn-primary btn-sm">
-      + Nuevo producto
-    </a>
-  </div>
-</div>
-    <!-- =====================================================
          TABLA DE PRODUCTOS
-         Muestra listado con imagen, stock mínimo y botón editar
          ===================================================== -->
-    <table class="table table-bordered table-striped align-middle">
-      <thead class="table-dark">
-        <tr>
-          <th>ID</th>
-          <th>Imagen</th>
-          <th>Nombre</th>
-          <th>Precio</th>
-          <th>Stock</th>
-          <th>Stock mínimo</th>
-          <th>Alerta</th>
-          <th>Estado</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th style="width: 60px;">ID</th>
+            <th style="width: 100px;">Imagen</th>
+            <th>Nombre</th>
+            <th style="width: 120px;">Precio</th>
+            <th style="width: 90px;">Stock</th>
+            <th style="width: 140px;">Stock mínimo</th>
+            <th style="width: 120px;">Alerta</th>
+            <th style="width: 110px;">Estado</th>
+            <th style="width: 180px;">Acciones</th>
+          </tr>
+        </thead>
 
-      <tbody>
+        <tbody>
+          {% for p in productos %}
 
-        <!-- =====================================================
-             RECORRIDO DE PRODUCTOS
-             Cada "p" es un producto traído desde SQLite
-             ===================================================== -->
-        {% for p in productos %}
-
-          <!-- =====================================================
-               RESALTADO DE FILA
-               Si el producto está activo, tiene stock_minimo > 0
-               y el stock es menor o igual al mínimo, se resalta
-               ===================================================== -->
+          <!-- Fila resaltada si el producto está bajo stock -->
           <tr class="{% if p.activo == 1 and p.stock_minimo > 0 and p.stock <= p.stock_minimo %}table-warning{% endif %}">
 
+            <!-- ID -->
             <td>{{ p.id }}</td>
 
-            <!-- =====================================================
-                 COLUMNA IMAGEN
-                 Si el producto tiene image_filename se muestra miniatura.
-                 Si no, se muestra "Sin imagen".
-                 ===================================================== -->
-            <td style="width: 90px;">
+            <!-- Imagen -->
+            <td>
               {% if p.image_filename %}
                 <img
                   src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
                   alt="Imagen de {{ p.nombre }}"
-                  style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd;"
+                  style="width: 70px; height: 70px; object-fit: contain; border-radius: 8px; border: 1px solid #ddd; background: #fff;"
                 >
               {% else %}
                 <span class="text-muted small">Sin imagen</span>
               {% endif %}
             </td>
 
+            <!-- Nombre -->
             <td>{{ p.nombre }}</td>
 
-            <!-- Precio con 2 decimales -->
+            <!-- Precio -->
             <td>₡{{ "%.2f"|format(p.precio) }}</td>
 
+            <!-- Stock -->
             <td>{{ p.stock }}</td>
+
+            <!-- Stock mínimo -->
             <td>{{ p.stock_minimo }}</td>
 
-            <!-- =====================================================
-                 BADGE DE ALERTA
-                 Indica si el producto está bajo stock o OK
-                 ===================================================== -->
+            <!-- Alerta -->
             <td>
               {% if p.activo == 1 and p.stock_minimo > 0 and p.stock <= p.stock_minimo %}
                 <span class="badge bg-danger">Bajo stock</span>
@@ -115,7 +105,7 @@
               {% endif %}
             </td>
 
-            <!-- Estado Activo/Inactivo -->
+            <!-- Estado -->
             <td>
               {% if p.activo == 1 %}
                 <span class="badge bg-primary">Activo</span>
@@ -124,32 +114,52 @@
               {% endif %}
             </td>
 
-            <!-- =====================================================
-                 ACCIONES
-                 Botón Editar para modificar:
-                 nombre, precio, stock, stock_minimo, activo, imagen
-                 ===================================================== -->
+            <!-- Acciones -->
             <td>
-              <a class="btn btn-outline-primary btn-sm"
-                href="{{ url_for('admin_product_edit', product_id=p.id) }}">
-              Editar
-            </a>
+              <div class="d-flex flex-wrap gap-1">
+
+                <a class="btn btn-outline-primary btn-sm"
+                   href="{{ url_for('admin_product_edit', product_id=p.id) }}">
+                  Editar
+                </a>
+
+                <form
+                  method="POST"
+                  action="{{ url_for('admin_product_delete', product_id=p.id) }}"
+                  onsubmit="return confirm('¿Seguro que deseas eliminar este producto? Solo se eliminará si no tiene historial de ventas o movimientos.');">
+
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                  <button type="submit" class="btn btn-outline-danger btn-sm">
+                    Eliminar
+                  </button>
+                </form>
+
+              </div>
             </td>
+
           </tr>
-        <!-- =====================================================
-             SI NO HAY PRODUCTOS
-             Se muestra un mensaje en una fila única
-             ===================================================== -->
-        {% else %}
+
+          {% else %}
           <tr>
             <td colspan="9" class="text-center text-muted">
               No hay productos registrados.
             </td>
           </tr>
-        {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
 
-      </tbody>
-    </table>
+    <!-- =====================================================
+         NOTA PREVENTIVA
+         ===================================================== -->
+    <div class="alert alert-light border mt-3 mb-0">
+      <small class="text-muted">
+        Nota: los productos con ventas o movimientos registrados no se eliminan para conservar el historial.
+        En esos casos, se recomienda dejarlos como <b>inactivos</b>.
+      </small>
+    </div>
 
   </div>
 </div>
