@@ -140,6 +140,35 @@ def norm_text(value):
     return value
 
 # =====================================================
+# FUNCIÓN AUXILIAR: VALIDAR CONTRASEÑAS
+# Reglas:
+# - mínimo 8 caracteres
+# - al menos una mayúscula
+# - al menos una minúscula
+# - al menos un número
+# =====================================================
+def validar_contrasena_segura(password):
+    errores = []
+
+    if not password:
+        errores.append("La contraseña no puede estar vacía.")
+        return errores
+
+    if len(password) < 8:
+        errores.append("Debe tener al menos 8 caracteres.")
+
+    if not any(c.isupper() for c in password):
+        errores.append("Debe incluir al menos una letra mayúscula.")
+
+    if not any(c.islower() for c in password):
+        errores.append("Debe incluir al menos una letra minúscula.")
+
+    if not any(c.isdigit() for c in password):
+        errores.append("Debe incluir al menos un número.")
+
+    return errores
+
+# =====================================================
 # COMANDO CLI: BACKUP DB
 # Comando:flask --app app.py backup-db
 # Crea un respaldo ZIP local en la carpeta /backups
@@ -478,7 +507,11 @@ def login():
         session["nombre"] = user["nombre"]
         session["rol"] = user["rol"]
 
-        flash(f"Bienvenido/a, {user['nombre']}!", "success")
+        if "password_temporal" in user.keys() and user["password_temporal"] == 1:
+            flash("Debes cambiar tu contraseña temporal antes de continuar.", "warning")
+            return redirect(url_for("cambiar_password_temporal"))
+
+            flash(f"Bienvenido/a, {user['nombre']}!", "success")
 
         # Redirección según rol
         if user["rol"] == "admin":
@@ -561,6 +594,71 @@ def perfil():
 
     return render_template("perfil.html", user=user)
 
+# =====================================================
+# CAMBIO OBLIGATORIO DE CONTRASEÑA TEMPORAL
+# Ruta: /cambiar-password-temporal
+# - Se usa cuando el admin crea o resetea una contraseña
+# - Obliga al usuario a definir una contraseña propia
+# =====================================================
+@app.route("/cambiar-password-temporal", methods=["GET", "POST"])
+def cambiar_password_temporal():
+    if "user_id" not in session:
+        flash("Debes iniciar sesión.", "warning")
+        return redirect(url_for("login"))
+
+    db = get_db()
+    user_id = session["user_id"]
+
+    user = db.execute(
+        "SELECT id, nombre, usuario, password_temporal FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+
+    if not user:
+        session.clear()
+        flash("Sesión inválida. Inicia sesión nuevamente.", "danger")
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        nueva = (request.form.get("password_nueva") or "").strip()
+        confirmar = (request.form.get("password_confirmar") or "").strip()
+
+        if not nueva or not confirmar:
+            flash("Completa todos los campos.", "danger")
+            return redirect(url_for("cambiar_password_temporal"))
+
+        if nueva != confirmar:
+            flash("La nueva contraseña y su confirmación no coinciden.", "danger")
+            return redirect(url_for("cambiar_password_temporal"))
+
+        errores_password = validar_contrasena_segura(nueva)
+        if errores_password:
+            flash(" ".join(errores_password), "warning")
+            return redirect(url_for("cambiar_password_temporal"))
+
+        nuevo_hash = bcrypt.hashpw(
+            nueva.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
+        db.execute(
+            """
+            UPDATE users
+            SET contrasena_hash = ?, password_temporal = 0
+            WHERE id = ?
+            """,
+            (nuevo_hash, user_id)
+        )
+        db.commit()
+
+        flash("Contraseña actualizada correctamente. Ya puedes usar el sistema.", "success")
+
+        if session.get("rol") == "admin":
+            return redirect(url_for("admin_panel"))
+
+        return redirect(url_for("catalogo"))
+
+    return render_template("cambiar_password_temporal.html", user=user)
 
 # =====================================================
 # PANEL ADMINISTRADOR
@@ -760,7 +858,7 @@ def admin_user_add():
         hash_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
         db.execute(
-            "INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado) VALUES (?, ?, ?, ?, 'activo')",
+            "INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado, password_temporal) VALUES (?, ?, ?, ?, 'activo', 1)    ",
             (nombre, usuario, hash_pw, rol)
         )
         db.commit()
@@ -819,10 +917,10 @@ def admin_user_edit(user_id):
         db.execute(
             """
             UPDATE users
-            SET nombre = ?, usuario = ?, rol = ?, estado = ?
-            WHERE id = ?
+            SET contrasena_hash = ?, password_temporal = 1
+             WHERE id = ?
             """,
-            (nombre, usuario, rol, estado, user_id)
+        (hash_pw, user_id)
         )
 
         if new_password:
