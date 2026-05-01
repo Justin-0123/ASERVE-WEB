@@ -4,96 +4,134 @@
 {% block content %}
 <!-- =====================================================
      CHECKOUT
-     Resumen de carrito + selección de método de pago
+     - Resumen del carrito
+     - Selección de método de pago
+     - Protección CSRF
+     - Token interno para evitar doble compra
      ===================================================== -->
 
 <h4 class="mb-3">Finalizar compra</h4>
 
 <div class="row g-3">
 
-  <!-- Resumen -->
+  <!-- =====================================================
+       RESUMEN DEL CARRITO
+       ===================================================== -->
   <div class="col-md-7">
     <div class="card shadow-sm">
       <div class="card-body p-2">
 
-        <table class="table table-bordered align-middle mb-0">
-          <thead class="table-dark">
-            <tr>
-              <th>Producto</th>
-              <th style="width:110px;">Cant.</th>
-              <th style="width:140px;">Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for it in items %}
-            <tr>
-              <td>{{ it.nombre }}</td>
-              <td>{{ it.cantidad }}</td>
-              <td>₡{{ "%.2f"|format(it.subtotal) }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>Producto</th>
+                <th style="width:110px;">Cant.</th>
+                <th style="width:140px;">Subtotal</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for it in items %}
+              <tr>
+                <td>{{ it.nombre }}</td>
+                <td>{{ it.cantidad }}</td>
+                <td>₡{{ "%.2f"|format(it.subtotal) }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="3" class="text-center text-muted">
+                  No hay productos en el carrito.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
 
       </div>
     </div>
 
-    <div class="d-flex justify-content-between mt-3">
-      <a class="btn btn-outline-primary" href="{{ url_for('ver_carrito') }}">Volver al carrito</a>
-      <div class="fs-5">Total: <b>₡{{ "%.2f"|format(total) }}</b></div>
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mt-3">
+      <a class="btn btn-outline-primary" href="{{ url_for('ver_carrito') }}">
+        Volver al carrito
+      </a>
+
+      <div class="fs-5">
+        Total:
+        <b>₡{{ "%.2f"|format(total) }}</b>
+      </div>
     </div>
   </div>
 
-  <!-- Pago -->
+  <!-- =====================================================
+       FORMULARIO DE PAGO
+       ===================================================== -->
   <div class="col-md-5">
     <div class="card shadow-sm">
       <div class="card-body">
 
-        <!-- =====================================================
-             FORMULARIO DE PAGO
-             - No asociado: solo contado y debe escribir nombre
-             - Asociado: contado o crédito
-             ===================================================== -->
-        <form method="POST">
+        <h6 class="mb-3">Método de pago</h6>
+
+        <form method="POST" id="checkoutForm">
+
+          <!-- Protección CSRF -->
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <!-- Token interno para evitar doble envío de compra -->
+          <input type="hidden" name="checkout_token" value="{{ checkout_token }}">
 
           <!-- =====================================================
-     NOMBRE PARA NO ASOCIADOS
-     Se solicita cuando tipo_usuario = no_asociado
-     (aunque exista sesión, por ejemplo un usuario general)
-     ===================================================== -->
-    {% if es_no_asociado %}
-        <div class="mb-3">
-        <label class="form-label">Nombre (no asociado)</label>
-        <input class="form-control" name="nombre_no_asociado" required>
-        <div class="form-text">Necesario para registrar la compra de no Asociados.</div>
-        </div>
-    {% endif %}
+               NOMBRE PARA NO ASOCIADOS
+               ===================================================== -->
+          {% if es_no_asociado %}
+          <div class="mb-3">
+            <label class="form-label">Nombre (no asociado)</label>
+            <input
+              class="form-control"
+              name="nombre_no_asociado"
+              required
+              autocomplete="name"
+            >
+            <div class="form-text">
+              Necesario para registrar la compra de no asociados.
+            </div>
+          </div>
+          {% endif %}
 
+          <!-- =====================================================
+               TIPO DE PAGO
+               - Asociado/Admin: contado o crédito
+               - No asociado: solo contado
+               ===================================================== -->
           <div class="mb-3">
             <label class="form-label">Tipo de pago</label>
-    <!-- =====================================================
-     TIPO DE PAGO
-     - Asociado: contado o crédito
-     - No asociado: solo contado
-     ===================================================== -->
-    {% if can_credit %}
-     <select class="form-select" name="tipo_pago" required>
-        <option value="contado">Contado</option>
-            <option value="credito">Crédito</option>
-         </select>
-    {% else %}
-    <select class="form-select" name="tipo_pago" required>
-            <option value="contado">Contado</option>
-        </select>
-    <div class="form-text">El crédito solo está disponible para usuarios registrados.</div>
-    {% endif %}
 
+            {% if can_credit %}
+              <select class="form-select" name="tipo_pago" required>
+                <option value="contado">Contado</option>
+                <option value="credito">Crédito</option>
+              </select>
+              <div class="form-text">
+                Seleccioná el método de pago para finalizar la compra.
+              </div>
+            {% else %}
+              <select class="form-select" name="tipo_pago" required>
+                <option value="contado">Contado</option>
+              </select>
+              <div class="form-text">
+                Compra disponible únicamente de contado.
+              </div>
+            {% endif %}
           </div>
 
-          <button class="btn btn-success w-100">
+          <!-- =====================================================
+               BOTÓN CONFIRMAR
+               ===================================================== -->
+          <button class="btn btn-success w-100" type="submit" id="btnConfirmarCompra">
             Confirmar compra
           </button>
-
+          
         </form>
 
       </div>
@@ -101,4 +139,36 @@
   </div>
 
 </div>
+
+<!-- =====================================================
+     JS SIMPLE
+     Evita que el usuario presione varias veces el botón
+     mientras se procesa la compra.
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("checkoutForm");
+    const btn = document.getElementById("btnConfirmarCompra");
+
+    if (form && btn) {
+      form.addEventListener("submit", function () {
+        btn.disabled = true;
+        btn.innerText = "Procesando compra...";
+      });
+    }
+  });
+
+  // =====================================================
+  // Si el usuario vuelve atrás después de confirmar compra,
+  // el navegador puede restaurar la página desde caché.
+  // Esto fuerza recarga para evitar que quede el botón
+  // pegado en "Procesando compra...".
+  // =====================================================
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) {
+      window.location.reload();
+    }
+  });
+</script>
+
 {% endblock %}

@@ -8,6 +8,7 @@ import zipfile
 import tempfile
 import shutil
 import click
+import secrets
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -2810,36 +2811,51 @@ def admin_report_top_products():
 
 # =====================================================
 # CATÁLOGO
+# - Muestra únicamente productos activos y con stock
+# - Permite búsqueda por nombre
+# - Evita mostrar productos sin disponibilidad
 # =====================================================
 @app.route("/catalogo")
 def catalogo():
     db = get_db()
+
     q = (request.args.get("q") or "").strip()
 
+    where = [
+        "activo = 1",
+        "stock > 0"
+    ]
+
+    params = []
+
     if q:
-        productos = db.execute(
-            """
-            SELECT *
-            FROM products
-            WHERE activo = 1
-              AND stock > 0
-              AND nombre LIKE ?
-            ORDER BY nombre ASC
-            """,
-            (f"%{q}%",)
-        ).fetchall()
-    else:
-        productos = db.execute(
-            """
-            SELECT *
-            FROM products
-            WHERE activo = 1 AND stock > 0
-            ORDER BY nombre ASC
-            """
-        ).fetchall()
+        where.append("nombre LIKE ?")
+        params.append(f"%{q}%")
 
-    return render_template("catalogo.html", productos=productos, q=q)
+    where_sql = "WHERE " + " AND ".join(where)
 
+    productos = db.execute(
+        f"""
+        SELECT
+            id,
+            nombre,
+            precio,
+            stock,
+            stock_minimo,
+            activo,
+            image_filename
+        FROM products
+        {where_sql}
+        ORDER BY nombre ASC
+        """,
+        params
+    ).fetchall()
+
+    return render_template(
+        "catalogo.html",
+        productos=productos,
+        q=q
+    )
 
 # =====================================================
 # CARRITO
@@ -2851,6 +2867,13 @@ def get_cart():
     return session["cart"]
 
 
+# =====================================================
+# CARRITO: VER CARRITO
+# - Limpia productos que ya no existen
+# - Quita productos inactivos
+# - Quita productos sin stock
+# - Ajusta cantidades si superan el stock actual
+# =====================================================
 @app.route("/carrito")
 def ver_carrito():
     cart = get_cart()
@@ -2859,42 +2882,103 @@ def ver_carrito():
         return render_template("carrito.html", items=[], total=0)
 
     db = get_db()
+
     ids = list(cart.keys())
     placeholders = ",".join(["?"] * len(ids))
 
     productos = db.execute(
-        f"SELECT * FROM products WHERE id IN ({placeholders})",
+        f"""
+        SELECT *
+        FROM products
+        WHERE id IN ({placeholders})
+        """,
         ids
     ).fetchall()
 
+    productos_map = {str(p["id"]): p for p in productos}
+
     items = []
     total = 0
+    cart_limpio = {}
+    hubo_ajustes = False
 
-    for p in productos:
-        pid = str(p["id"])
-        cantidad = int(cart.get(pid, 0))
+    for pid, cantidad_cart in cart.items():
+        p = productos_map.get(str(pid))
+
+        # Si el producto ya no existe en base de datos, se elimina del carrito
+        if not p:
+            hubo_ajustes = True
+            continue
+
+        # Validar cantidad del carrito
+        try:
+            cantidad = int(cantidad_cart)
+        except ValueError:
+            hubo_ajustes = True
+            continue
+
+        # Si la cantidad es inválida, se elimina del carrito
+        if cantidad <= 0:
+            hubo_ajustes = True
+            continue
+
+        # Si el producto está inactivo, se elimina del carrito
+        if int(p["activo"]) != 1:
+            hubo_ajustes = True
+            continue
+
+        stock_disponible = int(p["stock"])
+
+        # Si el producto no tiene stock, se elimina del carrito
+        if stock_disponible <= 0:
+            hubo_ajustes = True
+            continue
+
+        # Si el carrito tiene más cantidad que el stock disponible, se ajusta
+        if cantidad > stock_disponible:
+            cantidad = stock_disponible
+            hubo_ajustes = True
+
         subtotal = float(p["precio"]) * cantidad
         total += subtotal
+
+        cart_limpio[str(p["id"])] = cantidad
 
         items.append({
             "id": p["id"],
             "nombre": p["nombre"],
             "precio": float(p["precio"]),
-            "stock": int(p["stock"]),
+            "stock": stock_disponible,
             "image_filename": p["image_filename"],
             "cantidad": cantidad,
             "subtotal": subtotal
         })
 
+    session["cart"] = cart_limpio
+
+    if hubo_ajustes:
+        flash(
+            "El carrito fue actualizado porque algunos productos cambiaron de disponibilidad o stock.",
+            "warning"
+        )
+
     return render_template("carrito.html", items=items, total=total)
 
 
+# =====================================================
+# CARRITO: AGREGAR PRODUCTO
+# =====================================================
 @app.route("/carrito/add/<int:product_id>", methods=["POST"])
 def carrito_add(product_id):
     db = get_db()
 
     p = db.execute(
-        "SELECT * FROM products WHERE id = ? AND activo = 1",
+        """
+        SELECT *
+        FROM products
+        WHERE id = ?
+          AND activo = 1
+        """,
         (product_id,)
     ).fetchone()
 
@@ -2902,9 +2986,17 @@ def carrito_add(product_id):
         flash("Producto no disponible.", "danger")
         return redirect(url_for("catalogo"))
 
+    if int(p["stock"]) <= 0:
+        flash("Este producto no tiene stock disponible.", "warning")
+        return redirect(url_for("catalogo"))
+
     cart = get_cart()
     pid = str(product_id)
-    cantidad_actual = int(cart.get(pid, 0))
+
+    try:
+        cantidad_actual = int(cart.get(pid, 0))
+    except ValueError:
+        cantidad_actual = 0
 
     if cantidad_actual + 1 > int(p["stock"]):
         flash("No hay suficiente stock para agregar más.", "warning")
@@ -2917,12 +3009,20 @@ def carrito_add(product_id):
     return redirect(url_for("catalogo"))
 
 
+# =====================================================
+# CARRITO: AUMENTAR CANTIDAD
+# =====================================================
 @app.route("/carrito/inc/<int:product_id>", methods=["POST"])
 def carrito_inc(product_id):
     db = get_db()
 
     p = db.execute(
-        "SELECT * FROM products WHERE id = ? AND activo = 1",
+        """
+        SELECT *
+        FROM products
+        WHERE id = ?
+          AND activo = 1
+        """,
         (product_id,)
     ).fetchone()
 
@@ -2930,9 +3030,17 @@ def carrito_inc(product_id):
         flash("Producto no disponible.", "danger")
         return redirect(url_for("ver_carrito"))
 
+    if int(p["stock"]) <= 0:
+        flash("Este producto ya no tiene stock disponible.", "warning")
+        return redirect(url_for("ver_carrito"))
+
     cart = get_cart()
     pid = str(product_id)
-    cantidad_actual = int(cart.get(pid, 0))
+
+    try:
+        cantidad_actual = int(cart.get(pid, 0))
+    except ValueError:
+        cantidad_actual = 0
 
     if cantidad_actual + 1 > int(p["stock"]):
         flash("No hay suficiente stock.", "warning")
@@ -2944,11 +3052,18 @@ def carrito_inc(product_id):
     return redirect(url_for("ver_carrito"))
 
 
+# =====================================================
+# CARRITO: DISMINUIR CANTIDAD
+# =====================================================
 @app.route("/carrito/dec/<int:product_id>", methods=["POST"])
 def carrito_dec(product_id):
     cart = get_cart()
     pid = str(product_id)
-    cantidad_actual = int(cart.get(pid, 0))
+
+    try:
+        cantidad_actual = int(cart.get(pid, 0))
+    except ValueError:
+        cantidad_actual = 0
 
     if cantidad_actual <= 1:
         cart.pop(pid, None)
@@ -2960,6 +3075,9 @@ def carrito_dec(product_id):
     return redirect(url_for("ver_carrito"))
 
 
+# =====================================================
+# CARRITO: ELIMINAR PRODUCTO
+# =====================================================
 @app.route("/carrito/remove/<int:product_id>", methods=["POST"])
 def carrito_remove(product_id):
     cart = get_cart()
@@ -2970,16 +3088,21 @@ def carrito_remove(product_id):
     return redirect(url_for("ver_carrito"))
 
 
+# =====================================================
+# CARRITO: VACIAR CARRITO
+# =====================================================
 @app.route("/carrito/clear", methods=["POST"])
 def carrito_clear():
     session["cart"] = {}
     flash("Carrito vaciado.", "info")
 
     return redirect(url_for("ver_carrito"))
-
-
 # =====================================================
 # CHECKOUT
+# - Valida stock antes de confirmar
+# - Evita doble compra con token interno
+# - Calcula total siempre desde base de datos
+# - Usa bloqueo transaccional para proteger inventario
 # =====================================================
 @app.route("/checkout", methods=["GET", "POST"])
 def checkout():
@@ -2991,47 +3114,64 @@ def checkout():
 
     db = get_db()
 
-    ids = list(cart.keys())
-    placeholders = ",".join(["?"] * len(ids))
-
-    productos = db.execute(
-        f"SELECT * FROM products WHERE id IN ({placeholders})",
-        ids
-    ).fetchall()
-
-    items = []
-    total = 0
-
-    for p in productos:
-        pid = str(p["id"])
-        cantidad = int(cart.get(pid, 0))
-
-        if int(p["activo"]) != 1:
-            flash(f"El producto '{p['nombre']}' no está disponible.", "danger")
-            return redirect(url_for("ver_carrito"))
-
-        if cantidad > int(p["stock"]):
-            flash(f"No hay stock suficiente de '{p['nombre']}'.", "warning")
-            return redirect(url_for("ver_carrito"))
-
-        subtotal = float(p["precio"]) * cantidad
-        total += subtotal
-
-        items.append({
-            "id": p["id"],
-            "nombre": p["nombre"],
-            "precio": float(p["precio"]),
-            "cantidad": cantidad,
-            "subtotal": subtotal
-        })
-
-    user_id = session.get("user_id")
-    rol = session.get("rol")
-    tipo_usuario = "asociado" if user_id else "no_asociado"
-
+    # =====================================================
+    # GET: mostrar pantalla de confirmación
+    # =====================================================
     if request.method == "GET":
+        ids = list(cart.keys())
+        placeholders = ",".join(["?"] * len(ids))
+
+        productos = db.execute(
+            f"SELECT * FROM products WHERE id IN ({placeholders})",
+            ids
+        ).fetchall()
+
+        productos_map = {str(p["id"]): p for p in productos}
+
+        items = []
+        total = 0
+
+        for pid, cantidad_cart in cart.items():
+            p = productos_map.get(str(pid))
+
+            if not p:
+                flash("Uno de los productos del carrito ya no existe.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            cantidad = int(cantidad_cart)
+
+            if cantidad <= 0:
+                flash("Hay una cantidad inválida en el carrito.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            if int(p["activo"]) != 1:
+                flash(f"El producto '{p['nombre']}' ya no está disponible.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            if cantidad > int(p["stock"]):
+                flash(f"No hay stock suficiente de '{p['nombre']}'.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            subtotal = float(p["precio"]) * cantidad
+            total += subtotal
+
+            items.append({
+                "id": p["id"],
+                "nombre": p["nombre"],
+                "precio": float(p["precio"]),
+                "cantidad": cantidad,
+                "subtotal": subtotal
+            })
+
+        user_id = session.get("user_id")
+        rol = session.get("rol")
+
         es_no_asociado = True if not user_id else False
         can_credit = True if (user_id and rol in ("admin", "asociado")) else False
+
+        # Token interno para evitar doble submit
+        checkout_token = secrets.token_urlsafe(24)
+        session["checkout_token"] = checkout_token
 
         return render_template(
             "checkout.html",
@@ -3039,16 +3179,30 @@ def checkout():
             total=total,
             rol=rol,
             es_no_asociado=es_no_asociado,
-            can_credit=can_credit
+            can_credit=can_credit,
+            checkout_token=checkout_token
         )
 
+    # =====================================================
+    # POST: confirmar compra
+    # =====================================================
+    token_form = (request.form.get("checkout_token") or "").strip()
+    token_session = session.get("checkout_token")
+
+    if not token_session or token_form != token_session:
+        flash("Esta compra ya fue procesada o el formulario expiró. Revisá tu carrito antes de continuar.", "warning")
+        return redirect(url_for("ver_carrito"))
+
     tipo_pago = norm_text(request.form.get("tipo_pago"))
+    nombre_no_asociado = (request.form.get("nombre_no_asociado") or "").strip()
 
     if tipo_pago not in ("contado", "credito"):
         flash("Tipo de pago inválido.", "danger")
         return redirect(url_for("checkout"))
 
-    nombre_no_asociado = (request.form.get("nombre_no_asociado") or "").strip()
+    user_id = session.get("user_id")
+    rol = session.get("rol")
+    tipo_usuario = "asociado" if user_id else "no_asociado"
 
     if tipo_usuario == "no_asociado":
         if tipo_pago != "contado":
@@ -3064,56 +3218,120 @@ def checkout():
             flash("Tu usuario no tiene permiso para comprar a crédito.", "danger")
             return redirect(url_for("checkout"))
 
-    estado = "pagada" if tipo_pago == "contado" else "pendiente"
-    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        # Bloqueo de escritura para evitar que dos compras descuenten el mismo stock al mismo tiempo
+        db.execute("BEGIN IMMEDIATE")
 
-    cur = db.execute(
-        """
-        INSERT INTO orders (fecha, tipo_usuario, user_id, nombre_no_asociado, tipo_pago, total, estado)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            fecha,
-            tipo_usuario,
-            user_id if tipo_usuario == "asociado" else None,
-            nombre_no_asociado if tipo_usuario == "no_asociado" else None,
-            tipo_pago,
-            float(total),
-            estado
-        )
-    )
+        ids = list(cart.keys())
+        placeholders = ",".join(["?"] * len(ids))
 
-    order_id = cur.lastrowid
+        productos = db.execute(
+            f"SELECT * FROM products WHERE id IN ({placeholders})",
+            ids
+        ).fetchall()
 
-    for it in items:
-        db.execute(
+        productos_map = {str(p["id"]): p for p in productos}
+
+        items = []
+        total = 0
+
+        for pid, cantidad_cart in cart.items():
+            p = productos_map.get(str(pid))
+
+            if not p:
+                db.rollback()
+                flash("Uno de los productos del carrito ya no existe.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            cantidad = int(cantidad_cart)
+
+            if cantidad <= 0:
+                db.rollback()
+                flash("Hay una cantidad inválida en el carrito.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            if int(p["activo"]) != 1:
+                db.rollback()
+                flash(f"El producto '{p['nombre']}' ya no está disponible.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            if cantidad > int(p["stock"]):
+                db.rollback()
+                flash(f"No hay stock suficiente de '{p['nombre']}'. Stock disponible: {p['stock']}.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            subtotal = float(p["precio"]) * cantidad
+            total += subtotal
+
+            items.append({
+                "id": p["id"],
+                "nombre": p["nombre"],
+                "precio": float(p["precio"]),
+                "cantidad": cantidad,
+                "subtotal": subtotal
+            })
+
+        estado = "pagada" if tipo_pago == "contado" else "pendiente"
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cur = db.execute(
             """
-            INSERT INTO order_items (order_id, product_id, cantidad, precio_unitario)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO orders (fecha, tipo_usuario, user_id, nombre_no_asociado, tipo_pago, total, estado)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (order_id, it["id"], it["cantidad"], float(it["precio"]))
+            (
+                fecha,
+                tipo_usuario,
+                user_id if tipo_usuario == "asociado" else None,
+                nombre_no_asociado if tipo_usuario == "no_asociado" else None,
+                tipo_pago,
+                float(total),
+                estado
+            )
         )
 
-        db.execute(
-            "UPDATE products SET stock = stock - ? WHERE id = ?",
-            (it["cantidad"], it["id"])
-        )
+        order_id = cur.lastrowid
 
-        db.execute(
-            """
-            INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (it["id"], -it["cantidad"], "Venta", fecha, order_id)
-        )
+        for it in items:
+            db.execute(
+                """
+                INSERT INTO order_items (order_id, product_id, cantidad, precio_unitario)
+                VALUES (?, ?, ?, ?)
+                """,
+                (order_id, it["id"], it["cantidad"], float(it["precio"]))
+            )
 
-    db.commit()
+            db.execute(
+                """
+                UPDATE products
+                SET stock = stock - ?
+                WHERE id = ?
+                """,
+                (it["cantidad"], it["id"])
+            )
 
-    session["cart"] = {}
+            db.execute(
+                """
+                INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (it["id"], -it["cantidad"], "Venta", fecha, order_id)
+            )
 
-    flash(f"✅ Compra realizada. Orden #{order_id} creada.", "success")
-    return redirect(url_for("order_success", order_id=order_id))
+        db.commit()
 
+        # Limpiar carrito y token para que no se pueda reenviar la misma compra
+        session["cart"] = {}
+        session.pop("checkout_token", None)
+
+        flash(f"✅ Compra realizada. Orden #{order_id} creada.", "success")
+        return redirect(url_for("order_success", order_id=order_id))
+
+    except Exception as e:
+        db.rollback()
+        print("Error en checkout:", e)
+        flash("Ocurrió un error al procesar la compra. Intentá nuevamente.", "danger")
+        return redirect(url_for("ver_carrito"))
 
 # =====================================================
 # ORDEN SUCCESS

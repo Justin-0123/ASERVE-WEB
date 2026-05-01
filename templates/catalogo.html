@@ -5,94 +5,194 @@
 <div class="card shadow-sm card-compact">
   <div class="card-body">
 
-    <!-- Encabezado -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
       <div>
-        <h4 class="mb-0">Catálogo de Productos</h4>
-        <small class="text-muted">Buscador en vivo</small>
+        <h4 class="mb-0">Catálogo de productos</h4>
+        <small class="text-muted">
+          Productos disponibles para compra
+        </small>
       </div>
+
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('ver_carrito') }}">
+        Ver carrito
+      </a>
     </div>
 
-    <!-- 🔎 Buscador en vivo -->
-    <div class="mb-3">
-      <input
-        id="searchFront"
-        type="text"
-        class="form-control"
-        placeholder="🔎 Buscar producto..."
-        autocomplete="off"
-      >
-      <small class="text-muted">Ejemplo: Coca, Jalapeño, Tropical…</small>
-    </div>
+    <!-- =====================================================
+         BUSCADOR EN VIVO
+         ===================================================== -->
+    {% if productos %}
+      <div class="mb-3">
+        <label class="form-label mb-1">Buscar producto</label>
 
-    <!-- Contenedor de productos -->
-    <div class="row g-3" id="productsContainer">
-      {% for p in productos %}
-        <!-- ✅ Cada producto debe tener la clase product-item y data-name -->
-        <div class="col-12 col-sm-6 col-md-4 product-item" data-name="{{ p.nombre|lower }}">
+        <div class="input-group">
+          <input
+            id="searchFront"
+            type="text"
+            class="form-control"
+            placeholder="Ejemplo: Coca, Jalapeño, Tropical..."
+            autocomplete="off"
+          >
 
-          <!-- =========================
-               TU CARD (puedes ajustar)
-               ========================= -->
+          <button
+            class="btn btn-outline-secondary"
+            type="button"
+            id="btnClearSearch">
+            Limpiar
+          </button>
+        </div>
+
+        <small class="text-muted">
+          La búsqueda se aplica únicamente sobre los productos disponibles.
+        </small>
+      </div>
+    {% endif %}
+
+    <!-- =====================================================
+         PRODUCTOS DISPONIBLES
+         ===================================================== -->
+    {% if productos %}
+
+      <div class="row g-3" id="productsContainer">
+
+        {% for p in productos %}
+        <div class="col-12 col-sm-6 col-md-4 product-item"
+             data-name="{{ p.nombre|lower }}">
+
           <div class="card shadow-sm h-100">
+
+            <!-- Imagen del producto -->
             {% if p.image_filename %}
-              <img
-                src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
-                class="card-img-top"
-                alt="{{ p.nombre }}"
-                style="max-height:220px; object-fit:contain;"
-              >
+              <div class="bg-white text-center p-2 border-bottom">
+                <img
+                  src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
+                  class="img-fluid"
+                  alt="{{ p.nombre }}"
+                  style="max-height: 180px; object-fit: contain;"
+                >
+              </div>
+            {% else %}
+              <div class="bg-light text-center p-4 border-bottom text-muted">
+                Sin imagen
+              </div>
             {% endif %}
 
             <div class="card-body d-flex flex-column">
-              <h6 class="fw-bold mb-1">{{ p.nombre }}</h6>
-              <small class="text-muted">Stock: {{ p.stock }}</small>
 
-              <div class="fw-bold mt-2 mb-3">₡{{ "%.2f"|format(p.precio) }}</div>
+              <!-- Nombre -->
+              <h6 class="fw-bold mb-1">
+                {{ p.nombre }}
+              </h6>
 
-              <form method="POST" action="{{ url_for('carrito_add', product_id=p.id) }}" class="mt-auto">
+              <!-- Stock -->
+              <small class="text-muted mb-2">
+                Stock disponible: {{ p.stock }}
+              </small>
+
+              <!-- Precio -->
+              <div class="fw-bold fs-6 mb-3">
+                ₡{{ "%.2f"|format(p.precio) }}
+              </div>
+
+              <!-- Agregar al carrito -->
+              <form method="POST"
+                    action="{{ url_for('carrito_add', product_id=p.id) }}"
+                    class="mt-auto">
+
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
                 <button type="submit" class="btn btn-primary w-100 btn-sm">
-                  Agregar
+                  Agregar al carrito
                 </button>
               </form>
+
             </div>
           </div>
 
         </div>
-      {% endfor %}
-    </div>
+        {% endfor %}
 
-    <!-- Mensaje si no hay coincidencias -->
-    <div id="noResults" class="text-center text-muted mt-3 d-none">
-      No se encontraron productos con ese nombre.
-    </div>
+      </div>
+
+      <!-- Mensaje cuando la búsqueda no encuentra coincidencias -->
+      <div id="noResults" class="alert alert-light border text-center text-muted mt-3 d-none">
+        No se encontraron productos con ese nombre.
+      </div>
+
+    {% else %}
+
+      <!-- =====================================================
+           SIN PRODUCTOS DISPONIBLES
+           ===================================================== -->
+      <div class="alert alert-light border text-center mb-0">
+        <h6 class="mb-1">No hay productos disponibles en este momento</h6>
+        <div class="text-muted">
+          Los productos aparecerán aquí cuando estén activos y tengan stock disponible.
+        </div>
+
+        {% if session.get("rol") == "admin" %}
+          <div class="mt-3">
+            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin_products') }}">
+              Gestionar productos
+            </a>
+          </div>
+        {% endif %}
+      </div>
+
+    {% endif %}
 
   </div>
 </div>
 
-<!-- ✅ JS: búsqueda en vivo (sin Enter) -->
+<!-- =====================================================
+     JS: BÚSQUEDA EN VIVO
+     ===================================================== -->
 <script>
-  const input = document.getElementById("searchFront");
-  const items = document.querySelectorAll(".product-item");
-  const noResults = document.getElementById("noResults");
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("searchFront");
+    const btnClear = document.getElementById("btnClearSearch");
+    const items = document.querySelectorAll(".product-item");
+    const noResults = document.getElementById("noResults");
 
-  input.addEventListener("input", () => {
-    const q = input.value.trim().toLowerCase();
-    let visibleCount = 0;
+    if (!input) {
+      return;
+    }
 
-    items.forEach(el => {
-      const name = (el.dataset.name || "");
-      const match = name.includes(q);
+    function filtrarProductos() {
+      const q = input.value.trim().toLowerCase();
+      let visibleCount = 0;
 
-      el.style.display = match ? "" : "none";
-      if (match) visibleCount++;
-    });
+      items.forEach(function (el) {
+        const name = el.dataset.name || "";
+        const match = name.includes(q);
 
-    // Mostrar/ocultar mensaje de "no resultados"
-    if (q && visibleCount === 0) {
-      noResults.classList.remove("d-none");
-    } else {
-      noResults.classList.add("d-none");
+        el.style.display = match ? "" : "none";
+
+        if (match) {
+          visibleCount++;
+        }
+      });
+
+      if (noResults) {
+        if (q && visibleCount === 0) {
+          noResults.classList.remove("d-none");
+        } else {
+          noResults.classList.add("d-none");
+        }
+      }
+    }
+
+    input.addEventListener("input", filtrarProductos);
+
+    if (btnClear) {
+      btnClear.addEventListener("click", function () {
+        input.value = "";
+        filtrarProductos();
+        input.focus();
+      });
     }
   });
 </script>
