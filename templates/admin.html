@@ -286,6 +286,36 @@
         </div>
       </div>
 
+      <!-- =====================================================
+           AUDITORÍA
+           ===================================================== -->
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-sm admin-tile">
+          <div class="card-body p-3">
+
+            <div class="d-flex align-items-center gap-3 mb-2">
+              <div class="icon-circle bg-danger-subtle text-danger">🛡️</div>
+              <div>
+                <div class="fw-bold">Auditoría</div>
+                <small class="text-muted">Registro de acciones administrativas</small>
+              </div>
+            </div>
+
+            <div class="d-grid gap-2">
+              <a class="btn btn-outline-danger btn-sm"
+                 href="{{ url_for('admin_audit_logs') }}">
+                Ver auditoría
+              </a>
+
+              <div class="text-muted small">
+                Consulta acciones realizadas por administradores.
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
     </div><!-- /row -->
 
   </div>

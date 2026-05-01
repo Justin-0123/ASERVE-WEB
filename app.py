@@ -8,7 +8,6 @@ import zipfile
 import tempfile
 import shutil
 import click
-from flask_wtf.csrf import CSRFProtect, CSRFError
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -19,54 +18,44 @@ from flask import (
     redirect, url_for, session, flash, g, send_file
 )
 
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from werkzeug.utils import secure_filename
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
+
 
 # =====================================================
 # CARGA DE VARIABLES DE ENTORNO
-# Lee el archivo .env en desarrollo/local
-# En producción se configuran directamente en el servidor
 # =====================================================
 load_dotenv()
+
 
 # =====================================================
 # CONFIGURACIÓN PRINCIPAL DE FLASK
 # =====================================================
 app = Flask(__name__)
 
-# =====================================================
-# SECRET KEY
-# - Se toma desde .env o variable de entorno
-# - Es obligatoria para sesiones seguras
-# =====================================================
 app.secret_key = os.environ.get("SECRET_KEY")
 
 if not app.secret_key:
     raise RuntimeError("Falta configurar SECRET_KEY en el archivo .env o variables de entorno.")
 
+
 # =====================================================
 # PROTECCIÓN CSRF
-# Protege formularios POST contra envíos externos maliciosos.
-# Requiere SECRET_KEY configurada.
 # =====================================================
 csrf = CSRFProtect(app)
 
-# =====================================================
-# ERROR CSRF
-# Si el token CSRF falta o es inválido, muestra mensaje claro.
-# =====================================================
+
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
     flash("La sesión del formulario expiró o no es válida. Intenta nuevamente.", "warning")
     return redirect(request.referrer or url_for("inicio"))
 
+
 # =====================================================
 # BASE DE DATOS
-# - En local usa instance/aserve.db
-# - En producción puede cambiarse desde DATABASE_PATH
 # =====================================================
 database_path = os.environ.get("DATABASE_PATH", os.path.join(app.instance_path, "aserve.db"))
 
@@ -75,56 +64,82 @@ if not os.path.isabs(database_path):
 
 app.config["DATABASE"] = database_path
 
+
 # =====================================================
 # SUBIDA DE IMÁGENES
 # =====================================================
 upload_folder = os.environ.get("UPLOAD_FOLDER", os.path.join("static", "uploads"))
 app.config["UPLOAD_FOLDER"] = upload_folder
-
 app.config["ALLOWED_EXTENSIONS"] = {"png", "jpg", "jpeg", "webp"}
 
-# Límite máximo de subida: 2 MB por imagen
+# Límite máximo de subida: 2 MB
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
+
 # =====================================================
-# SEGURIDAD DE COOKIES DE SESIÓN
-# SESSION_COOKIE_SECURE debe ser 1 cuando uses HTTPS
+# SEGURIDAD DE COOKIES
 # =====================================================
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
+
+
 # =====================================================
 # FUNCIONES DE BASE DE DATOS
 # =====================================================
 def get_db():
-    """
-    Devuelve una conexión a la base de datos.
-    Usa 'g' para mantener una sola conexión por request.
-    """
     if "db" not in g:
+        db_folder = os.path.dirname(app.config["DATABASE"])
+        os.makedirs(db_folder, exist_ok=True)
+
         g.db = sqlite3.connect(app.config["DATABASE"])
         g.db.row_factory = sqlite3.Row
+
     return g.db
 
 
 @app.teardown_appcontext
 def close_db(exception=None):
-    """
-    Cierra la conexión a la base de datos al finalizar cada request.
-    """
     db = g.pop("db", None)
+
     if db is not None:
         db.close()
+
+
+# =====================================================
+# FUNCIÓN AUXILIAR: ASEGURAR ESTRUCTURA ADICIONAL
+# - Crea audit_logs si no existe
+# - Agrega password_temporal si no existe en users
+# =====================================================
+def ensure_app_schema(db):
+    try:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha TEXT NOT NULL,
+                admin_id INTEGER,
+                admin_nombre TEXT,
+                accion TEXT NOT NULL,
+                detalle TEXT
+            )
+        """)
+
+        columnas_users = db.execute("PRAGMA table_info(users)").fetchall()
+        nombres_columnas = [c["name"] for c in columnas_users]
+
+        if nombres_columnas and "password_temporal" not in nombres_columnas:
+            db.execute("ALTER TABLE users ADD COLUMN password_temporal INTEGER DEFAULT 0")
+
+        db.commit()
+
+    except sqlite3.OperationalError as e:
+        print("Aviso al verificar estructura:", e)
 
 
 # =====================================================
 # FUNCIÓN AUXILIAR PARA VALIDAR IMÁGENES
 # =====================================================
 def allowed_file(filename):
-    """
-    Verifica que el archivo tenga una extensión permitida
-    para subir como imagen.
-    """
     return (
         "." in filename
         and filename.rsplit(".", 1)[1].lower() in app.config["ALLOWED_EXTENSIONS"]
@@ -132,20 +147,16 @@ def allowed_file(filename):
 
 
 # =====================================================
-# FUNCIÓN AUXILIAR: NORMALIZAR TEXTO (PAGOS / ESTADOS)
+# FUNCIÓN AUXILIAR: NORMALIZAR TEXTO
 # =====================================================
 def norm_text(value):
     value = (value or "").strip().lower()
     value = value.replace("é", "e")
     return value
 
+
 # =====================================================
 # FUNCIÓN AUXILIAR: VALIDAR CONTRASEÑAS
-# Reglas:
-# - mínimo 8 caracteres
-# - al menos una mayúscula
-# - al menos una minúscula
-# - al menos un número
 # =====================================================
 def validar_contrasena_segura(password):
     errores = []
@@ -168,30 +179,48 @@ def validar_contrasena_segura(password):
 
     return errores
 
+
+# =====================================================
+# FUNCIÓN AUXILIAR: REGISTRAR AUDITORÍA
+# =====================================================
+def registrar_auditoria(accion, detalle="", commit=False):
+    try:
+        db = get_db()
+
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        admin_id = session.get("user_id")
+        admin_nombre = session.get("nombre", "Sistema")
+
+        db.execute(
+            """
+            INSERT INTO audit_logs (fecha, admin_id, admin_nombre, accion, detalle)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (fecha, admin_id, admin_nombre, accion, detalle)
+        )
+
+        if commit:
+            db.commit()
+
+    except Exception as e:
+        print("Error registrando auditoría:", e)
+
+
 # =====================================================
 # COMANDO CLI: BACKUP DB
-# Comando:flask --app app.py backup-db
-# Crea un respaldo ZIP local en la carpeta /backups
-# Incluye:
-# - Base de datos SQLite
-# - Imágenes subidas
+# Comando:
+# flask --app app.py backup-db
 # =====================================================
 @app.cli.command("backup-db")
 def backup_db_command():
-    # Crear carpeta de respaldos si no existe
     backup_folder = os.path.join(os.getcwd(), "backups")
     os.makedirs(backup_folder, exist_ok=True)
 
-    # Fecha/hora para nombre del archivo
     fecha_backup = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     backup_filename = f"respaldo_aserve_{fecha_backup}.zip"
     backup_path = os.path.join(backup_folder, backup_filename)
 
     with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
-
-        # =====================================================
-        # 1) Respaldar base de datos SQLite de forma segura
-        # =====================================================
         db_original_path = app.config["DATABASE"]
 
         if os.path.exists(db_original_path):
@@ -208,33 +237,24 @@ def backup_db_command():
                 source.close()
                 destination.close()
 
-                zip_file.write(
-                    temp_db_path,
-                    arcname="database/aserve.db"
-                )
+                zip_file.write(temp_db_path, arcname="database/aserve.db")
 
             finally:
                 if os.path.exists(temp_db_path):
                     os.remove(temp_db_path)
 
-        # =====================================================
-        # 2) Respaldar imágenes subidas
-        # =====================================================
-        upload_folder = app.config["UPLOAD_FOLDER"]
+        upload_folder_abs = app.config["UPLOAD_FOLDER"]
 
-        if os.path.exists(upload_folder):
-            for root, dirs, files in os.walk(upload_folder):
+        if not os.path.isabs(upload_folder_abs):
+            upload_folder_abs = os.path.join(os.getcwd(), upload_folder_abs)
+
+        if os.path.exists(upload_folder_abs):
+            for root, dirs, files in os.walk(upload_folder_abs):
                 for file in files:
                     file_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(file_path, upload_folder_abs)
+                    zip_file.write(file_path, arcname=os.path.join("uploads", relative_path))
 
-                    relative_path = os.path.relpath(file_path, upload_folder)
-                    zip_name = os.path.join("uploads", relative_path)
-
-                    zip_file.write(file_path, arcname=zip_name)
-
-        # =====================================================
-        # 3) Archivo informativo
-        # =====================================================
         info = f"""RESPALDO ASERVE
 Fecha de respaldo: {fecha_backup}
 
@@ -250,54 +270,37 @@ Guardar este archivo en un lugar seguro.
     print("✅ Respaldo creado correctamente.")
     print(f"Archivo: {backup_path}")
 
+
 # =====================================================
 # COMANDO CLI: RESTAURAR RESPALDO
 # Comando:
 # flask --app app.py restore-backup "backups/respaldo_aserve_XXXX.zip"
-#
-# IMPORTANTE:
-# - Detener Flask antes de restaurar.
-# - Reemplaza la base actual y las imágenes actuales.
-# - Antes de restaurar crea un respaldo automático de emergencia.
 # =====================================================
 @app.cli.command("restore-backup")
 @click.argument("zip_path")
 def restore_backup_command(zip_path):
-    # -----------------------------------------------------
-    # 1) Validar que el ZIP exista
-    # -----------------------------------------------------
     if not os.path.exists(zip_path):
         print("❌ El archivo ZIP no existe.")
         print(f"Ruta recibida: {zip_path}")
         return
 
-    # -----------------------------------------------------
-    # 2) Validar que sea un ZIP correcto
-    # -----------------------------------------------------
     if not zipfile.is_zipfile(zip_path):
         print("❌ El archivo indicado no es un ZIP válido.")
         return
 
-    # -----------------------------------------------------
-    # 3) Preparar rutas
-    # -----------------------------------------------------
     db_path = app.config["DATABASE"]
     db_folder = os.path.dirname(db_path)
 
-    upload_folder = app.config["UPLOAD_FOLDER"]
+    upload_folder_abs = app.config["UPLOAD_FOLDER"]
 
-    # Si upload_folder es relativo, convertirlo a ruta absoluta
-    if not os.path.isabs(upload_folder):
-        upload_folder = os.path.join(os.getcwd(), upload_folder)
+    if not os.path.isabs(upload_folder_abs):
+        upload_folder_abs = os.path.join(os.getcwd(), upload_folder_abs)
 
     os.makedirs(db_folder, exist_ok=True)
-    os.makedirs(upload_folder, exist_ok=True)
+    os.makedirs(upload_folder_abs, exist_ok=True)
 
     fecha_restore = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    # -----------------------------------------------------
-    # 4) Crear respaldo de emergencia antes de restaurar
-    # -----------------------------------------------------
     backup_folder = os.path.join(os.getcwd(), "backups")
     os.makedirs(backup_folder, exist_ok=True)
 
@@ -309,8 +312,6 @@ def restore_backup_command(zip_path):
     print("🟡 Creando respaldo de emergencia antes de restaurar...")
 
     with zipfile.ZipFile(pre_backup_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
-
-        # Copia segura de la DB actual
         if os.path.exists(db_path):
             with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
                 temp_db_path = temp_db.name
@@ -325,23 +326,18 @@ def restore_backup_command(zip_path):
                 source.close()
                 destination.close()
 
-                zip_file.write(
-                    temp_db_path,
-                    arcname="database/aserve.db"
-                )
+                zip_file.write(temp_db_path, arcname="database/aserve.db")
 
             finally:
                 if os.path.exists(temp_db_path):
                     os.remove(temp_db_path)
 
-        # Copia de uploads actuales
-        if os.path.exists(upload_folder):
-            for root, dirs, files in os.walk(upload_folder):
+        if os.path.exists(upload_folder_abs):
+            for root, dirs, files in os.walk(upload_folder_abs):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    relative_path = os.path.relpath(file_path, upload_folder)
-                    zip_name = os.path.join("uploads", relative_path)
-                    zip_file.write(file_path, arcname=zip_name)
+                    relative_path = os.path.relpath(file_path, upload_folder_abs)
+                    zip_file.write(file_path, arcname=os.path.join("uploads", relative_path))
 
         info = f"""RESPALDO DE EMERGENCIA ASERVE
 Fecha: {fecha_restore}
@@ -356,9 +352,6 @@ Contenido:
 
     print(f"✅ Respaldo de emergencia creado: {pre_backup_path}")
 
-    # -----------------------------------------------------
-    # 5) Extraer ZIP de respaldo en carpeta temporal
-    # -----------------------------------------------------
     with tempfile.TemporaryDirectory() as temp_dir:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
@@ -366,21 +359,14 @@ Contenido:
         restored_db = os.path.join(temp_dir, "database", "aserve.db")
         restored_uploads = os.path.join(temp_dir, "uploads")
 
-        # -------------------------------------------------
-        # 6) Validar que el respaldo tenga base de datos
-        # -------------------------------------------------
         if not os.path.exists(restored_db):
             print("❌ El respaldo no contiene database/aserve.db.")
             print("No se restauró nada.")
             print(f"Tu respaldo de emergencia quedó en: {pre_backup_path}")
             return
 
-        # -------------------------------------------------
-        # 7) Restaurar base de datos
-        # -------------------------------------------------
         print("🟡 Restaurando base de datos...")
 
-        # Si existe la DB actual, reemplazarla
         if os.path.exists(db_path):
             os.remove(db_path)
 
@@ -388,21 +374,16 @@ Contenido:
 
         print("✅ Base de datos restaurada correctamente.")
 
-        # -------------------------------------------------
-        # 8) Restaurar imágenes/uploads
-        # -------------------------------------------------
         print("🟡 Restaurando imágenes...")
 
-        # Borrar uploads actuales
-        if os.path.exists(upload_folder):
-            shutil.rmtree(upload_folder)
+        if os.path.exists(upload_folder_abs):
+            shutil.rmtree(upload_folder_abs)
 
-        # Si el respaldo trae uploads, copiarlos
         if os.path.exists(restored_uploads):
-            shutil.copytree(restored_uploads, upload_folder)
+            shutil.copytree(restored_uploads, upload_folder_abs)
             print("✅ Imágenes restauradas correctamente.")
         else:
-            os.makedirs(upload_folder, exist_ok=True)
+            os.makedirs(upload_folder_abs, exist_ok=True)
             print("⚠️ El respaldo no tenía carpeta uploads. Se creó vacía.")
 
     print("")
@@ -413,28 +394,30 @@ Contenido:
     print("Ahora podés iniciar Flask nuevamente con:")
     print("python app.py")
 
+
 # =====================================================
-# COMANDOS DE CONSOLA (FLASK CLI)
+# COMANDOS DE CONSOLA
 # =====================================================
 @app.cli.command("init-db")
 def init_db_command():
-    """
-    Inicializa la base de datos ejecutando schema.sql
-    """
     os.makedirs(app.instance_path, exist_ok=True)
+
     db = get_db()
+
     with app.open_resource("schema.sql") as f:
         db.executescript(f.read().decode("utf-8"))
+
+    ensure_app_schema(db)
+
     db.commit()
+
     print("✅ Base de datos inicializada correctamente.")
 
 
 @app.cli.command("create-admin")
 def create_admin_command():
-    """
-    Crea el usuario administrador inicial si no existe
-    """
     db = get_db()
+    ensure_app_schema(db)
 
     nombre = "Administrador"
     usuario = "admin"
@@ -454,10 +437,23 @@ def create_admin_command():
         bcrypt.gensalt()
     ).decode("utf-8")
 
-    db.execute(
-        "INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado) VALUES (?, ?, ?, ?, ?)",
-        (nombre, usuario, hash_pw, "admin", "activo")
-    )
+    try:
+        db.execute(
+            """
+            INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado, password_temporal)
+            VALUES (?, ?, ?, ?, ?, 0)
+            """,
+            (nombre, usuario, hash_pw, "admin", "activo")
+        )
+    except sqlite3.OperationalError:
+        db.execute(
+            """
+            INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (nombre, usuario, hash_pw, "admin", "activo")
+        )
+
     db.commit()
 
     print("✅ Admin creado correctamente.")
@@ -465,7 +461,7 @@ def create_admin_command():
 
 
 # =====================================================
-# RUTA: /
+# RUTA PRINCIPAL
 # =====================================================
 @app.route("/")
 def inicio():
@@ -482,6 +478,8 @@ def login():
         contrasena = (request.form.get("contrasena") or "").strip()
 
         db = get_db()
+        ensure_app_schema(db)
+
         user = db.execute(
             "SELECT * FROM users WHERE usuario = ?",
             (usuario,)
@@ -502,18 +500,17 @@ def login():
             flash("Usuario o contraseña incorrectos.", "danger")
             return redirect(url_for("login"))
 
-        # Guardar datos en sesión
         session["user_id"] = user["id"]
         session["nombre"] = user["nombre"]
         session["rol"] = user["rol"]
+        session["password_temporal"] = user["password_temporal"] if "password_temporal" in user.keys() else 0
 
-        if "password_temporal" in user.keys() and user["password_temporal"] == 1:
+        if session.get("password_temporal") == 1:
             flash("Debes cambiar tu contraseña temporal antes de continuar.", "warning")
             return redirect(url_for("cambiar_password_temporal"))
 
-            flash(f"Bienvenido/a, {user['nombre']}!", "success")
+        flash(f"Bienvenido/a, {user['nombre']}!", "success")
 
-        # Redirección según rol
         if user["rol"] == "admin":
             return redirect(url_for("admin_panel"))
 
@@ -533,7 +530,31 @@ def logout():
 
 
 # =====================================================
-# PERFIL (ASOCIADO/ADMIN LOGUEADO)
+# PROTECCIÓN GLOBAL: CONTRASEÑA TEMPORAL
+# =====================================================
+@app.before_request
+def proteger_password_temporal():
+    if "user_id" not in session:
+        return None
+
+    rutas_permitidas = {
+        "cambiar_password_temporal",
+        "logout",
+        "static"
+    }
+
+    if request.endpoint in rutas_permitidas:
+        return None
+
+    if session.get("password_temporal") == 1:
+        flash("Debes cambiar tu contraseña temporal antes de continuar.", "warning")
+        return redirect(url_for("cambiar_password_temporal"))
+
+    return None
+
+
+# =====================================================
+# PERFIL
 # =====================================================
 @app.route("/perfil", methods=["GET", "POST"])
 def perfil():
@@ -543,6 +564,7 @@ def perfil():
 
     db = get_db()
     user_id = session["user_id"]
+
     user = db.execute(
         "SELECT id, nombre, usuario, rol, estado FROM users WHERE id = ?",
         (user_id,)
@@ -566,8 +588,10 @@ def perfil():
             flash("La nueva contraseña y su confirmación no coinciden.", "danger")
             return redirect(url_for("perfil"))
 
-        if len(nueva) < 6:
-            flash("La nueva contraseña debe tener al menos 6 caracteres.", "warning")
+        errores_password = validar_contrasena_segura(nueva)
+
+        if errores_password:
+            flash(" ".join(errores_password), "warning")
             return redirect(url_for("perfil"))
 
         user_full = db.execute(
@@ -582,7 +606,11 @@ def perfil():
             flash("La contraseña actual no es correcta.", "danger")
             return redirect(url_for("perfil"))
 
-        nuevo_hash = bcrypt.hashpw(nueva.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        nuevo_hash = bcrypt.hashpw(
+            nueva.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
         db.execute(
             "UPDATE users SET contrasena_hash = ? WHERE id = ?",
             (nuevo_hash, user_id)
@@ -594,11 +622,9 @@ def perfil():
 
     return render_template("perfil.html", user=user)
 
+
 # =====================================================
 # CAMBIO OBLIGATORIO DE CONTRASEÑA TEMPORAL
-# Ruta: /cambiar-password-temporal
-# - Se usa cuando el admin crea o resetea una contraseña
-# - Obliga al usuario a definir una contraseña propia
 # =====================================================
 @app.route("/cambiar-password-temporal", methods=["GET", "POST"])
 def cambiar_password_temporal():
@@ -607,6 +633,8 @@ def cambiar_password_temporal():
         return redirect(url_for("login"))
 
     db = get_db()
+    ensure_app_schema(db)
+
     user_id = session["user_id"]
 
     user = db.execute(
@@ -632,6 +660,7 @@ def cambiar_password_temporal():
             return redirect(url_for("cambiar_password_temporal"))
 
         errores_password = validar_contrasena_segura(nueva)
+
         if errores_password:
             flash(" ".join(errores_password), "warning")
             return redirect(url_for("cambiar_password_temporal"))
@@ -651,6 +680,8 @@ def cambiar_password_temporal():
         )
         db.commit()
 
+        session["password_temporal"] = 0
+
         flash("Contraseña actualizada correctamente. Ya puedes usar el sistema.", "success")
 
         if session.get("rol") == "admin":
@@ -659,6 +690,7 @@ def cambiar_password_temporal():
         return redirect(url_for("catalogo"))
 
     return render_template("cambiar_password_temporal.html", user=user)
+
 
 # =====================================================
 # PANEL ADMINISTRADOR
@@ -677,7 +709,7 @@ def admin_panel():
     creditos_pendientes = db.execute("""
         SELECT COUNT(*) AS n
         FROM orders
-        WHERE lower(trim(tipo_pago)) IN ('credito', 'crédito')
+        WHERE replace(lower(trim(tipo_pago)), 'é', 'e') = 'credito'
           AND lower(trim(estado)) = 'pendiente'
     """).fetchone()["n"]
 
@@ -698,7 +730,7 @@ def admin_panel():
     ordenes_14 = db.execute("""
         SELECT COUNT(*) AS n
         FROM orders
-        WHERE date(fecha) >= date('now','-14 day')
+        WHERE date(fecha) >= date('now','-13 day')
           AND date(fecha) <= date('now')
     """).fetchone()["n"]
 
@@ -711,30 +743,133 @@ def admin_panel():
     )
 
 # =====================================================
-# ADMIN: DESCARGAR RESPALDO COMPLETO
-# Ruta: /admin/backup/download
-# - Descarga un archivo ZIP con:
-#   1) Base de datos SQLite
-#   2) Imágenes de productos subidas
-# - Solo accesible para admin
+# ADMIN: AUDITORÍA
+# Ruta: /admin/audit
+# - Muestra resumen por tipo de acción
+# - Filtra automáticamente últimos 14 días
+# - Permite filtrar por acción y fechas
+# - Permite ver u ocultar el detalle individual
 # =====================================================
-@app.route("/admin/backup/download")
-def admin_backup_download():
-    # Seguridad: solo admin
+@app.route("/admin/audit")
+def admin_audit_logs():
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
-    # Fecha/hora para nombre del archivo
-    fecha_backup = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    db = get_db()
+    ensure_app_schema(db)
 
-    # ZIP en memoria
+    accion = (request.args.get("accion") or "").strip()
+    start = (request.args.get("start") or "").strip()
+    end = (request.args.get("end") or "").strip()
+    ver_detalle = (request.args.get("ver_detalle") or "").strip() == "1"
+
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # Si no se envían fechas desde el filtro, se cargan
+    # automáticamente desde hace 13 días hasta hoy.
+    # =====================================================
+    hoy = datetime.now().date()
+    hace_14 = hoy - timedelta(days=13)
+
+    if not start:
+        start = hace_14.strftime("%Y-%m-%d")
+
+    if not end:
+        end = hoy.strftime("%Y-%m-%d")
+
+    where = []
+    params = []
+
+    if accion:
+        where.append("accion = ?")
+        params.append(accion)
+
+    # Siempre se aplica el rango de fechas
+    where.append("date(fecha) >= date(?)")
+    params.append(start)
+
+    where.append("date(fecha) <= date(?)")
+    params.append(end)
+
+    where_sql = "WHERE " + " AND ".join(where)
+
+    # Lista de acciones disponibles para el filtro
+    acciones_disponibles = db.execute(
+        """
+        SELECT DISTINCT accion
+        FROM audit_logs
+        ORDER BY accion ASC
+        """
+    ).fetchall()
+
+    # Resumen agrupado por acción
+    resumen_acciones = db.execute(
+        f"""
+        SELECT
+            accion,
+            COUNT(*) AS cantidad,
+            MAX(fecha) AS ultima_fecha
+        FROM audit_logs
+        {where_sql}
+        GROUP BY accion
+        ORDER BY cantidad DESC, accion ASC
+        """,
+        params
+    ).fetchall()
+
+    # Totales generales del rango/filtro
+    resumen_general = db.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_acciones,
+            COUNT(DISTINCT accion) AS tipos_acciones,
+            MAX(fecha) AS ultima_accion
+        FROM audit_logs
+        {where_sql}
+        """,
+        params
+    ).fetchone()
+
+    # Detalle individual, solo si se activa
+    logs = []
+
+    if ver_detalle or accion:
+        logs = db.execute(
+            f"""
+            SELECT id, fecha, admin_nombre, accion, detalle
+            FROM audit_logs
+            {where_sql}
+            ORDER BY id DESC
+            LIMIT 300
+            """,
+            params
+        ).fetchall()
+
+    return render_template(
+        "admin_audit_logs.html",
+        logs=logs,
+        resumen_acciones=resumen_acciones,
+        resumen_general=resumen_general,
+        acciones_disponibles=acciones_disponibles,
+        accion=accion,
+        start=start,
+        end=end,
+        ver_detalle=ver_detalle
+    )
+
+# =====================================================
+# ADMIN: DESCARGAR RESPALDO
+# =====================================================
+@app.route("/admin/backup/download")
+def admin_backup_download():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    fecha_backup = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"respaldo_aserve_{fecha_backup}.zip"
     zip_buffer = BytesIO()
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-
-        # =====================================================
-        # 1) Respaldar base de datos usando backup seguro SQLite
-        # =====================================================
         db_original_path = app.config["DATABASE"]
 
         if os.path.exists(db_original_path):
@@ -742,7 +877,6 @@ def admin_backup_download():
                 temp_db_path = temp_db.name
 
             try:
-                # Copia segura de la DB incluso si la app está abierta
                 source = sqlite3.connect(db_original_path)
                 destination = sqlite3.connect(temp_db_path)
 
@@ -752,36 +886,24 @@ def admin_backup_download():
                 source.close()
                 destination.close()
 
-                # Agregar DB al ZIP
-                zip_file.write(
-                    temp_db_path,
-                    arcname="database/aserve.db"
-                )
+                zip_file.write(temp_db_path, arcname="database/aserve.db")
 
             finally:
-                # Borrar copia temporal
                 if os.path.exists(temp_db_path):
                     os.remove(temp_db_path)
 
-        # =====================================================
-        # 2) Respaldar imágenes subidas
-        # =====================================================
-        upload_folder = app.config["UPLOAD_FOLDER"]
+        upload_folder_abs = app.config["UPLOAD_FOLDER"]
 
-        if os.path.exists(upload_folder):
-            for root, dirs, files in os.walk(upload_folder):
+        if not os.path.isabs(upload_folder_abs):
+            upload_folder_abs = os.path.join(os.getcwd(), upload_folder_abs)
+
+        if os.path.exists(upload_folder_abs):
+            for root, dirs, files in os.walk(upload_folder_abs):
                 for file in files:
                     file_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(file_path, upload_folder_abs)
+                    zip_file.write(file_path, arcname=os.path.join("uploads", relative_path))
 
-                    # Ruta relativa dentro del ZIP
-                    relative_path = os.path.relpath(file_path, upload_folder)
-                    zip_name = os.path.join("uploads", relative_path)
-
-                    zip_file.write(file_path, arcname=zip_name)
-
-        # =====================================================
-        # 3) Agregar archivo informativo
-        # =====================================================
         info = f"""RESPALDO ASERVE
 Fecha de respaldo: {fecha_backup}
 
@@ -797,7 +919,11 @@ Guardarlo en un lugar seguro.
 
     zip_buffer.seek(0)
 
-    filename = f"respaldo_aserve_{fecha_backup}.zip"
+    registrar_auditoria(
+        "Descargar respaldo",
+        f"Se generó y descargó el respaldo '{filename}'. Incluye base de datos e imágenes del sistema.",
+        commit=True
+    )
 
     return send_file(
         zip_buffer,
@@ -806,12 +932,12 @@ Guardarlo en un lugar seguro.
         mimetype="application/zip"
     )
 
+
 # =====================================================
-# ADMIN: USUARIOS (LISTA)
+# ADMIN: USUARIOS
 # =====================================================
 @app.route("/admin/users")
 def admin_users():
-    # Seguridad: solo admin
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
@@ -826,15 +952,13 @@ def admin_users():
     return render_template("admin_users.html", usuarios=usuarios)
 
 
-# =====================================================
-# ADMIN: USUARIOS (AGREGAR)
-# =====================================================
 @app.route("/admin/users/add", methods=["GET", "POST"])
 def admin_user_add():
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
     db = get_db()
+    ensure_app_schema(db)
 
     if request.method == "POST":
         nombre = (request.form.get("nombre") or "").strip()
@@ -846,21 +970,43 @@ def admin_user_add():
             flash("Nombre, usuario y contraseña son obligatorios.", "danger")
             return redirect(url_for("admin_user_add"))
 
+        errores_password = validar_contrasena_segura(password)
+
+        if errores_password:
+            flash(" ".join(errores_password), "warning")
+            return redirect(url_for("admin_user_add"))
+
         if rol not in ("admin", "asociado"):
             flash("Rol inválido.", "danger")
             return redirect(url_for("admin_user_add"))
 
-        existe = db.execute("SELECT id FROM users WHERE usuario = ?", (usuario,)).fetchone()
+        existe = db.execute(
+            "SELECT id FROM users WHERE usuario = ?",
+            (usuario,)
+        ).fetchone()
+
         if existe:
             flash("Ese usuario ya existe.", "warning")
             return redirect(url_for("admin_user_add"))
 
-        hash_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        hash_pw = bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
 
         db.execute(
-            "INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado, password_temporal) VALUES (?, ?, ?, ?, 'activo', 1)    ",
+            """
+            INSERT INTO users (nombre, usuario, contrasena_hash, rol, estado, password_temporal)
+            VALUES (?, ?, ?, ?, 'activo', 1)
+            """,
             (nombre, usuario, hash_pw, rol)
         )
+
+        registrar_auditoria(
+            "Crear usuario",
+            f"Nombre: {nombre}. Usuario: {usuario}. Rol asignado: {rol}. Estado inicial: activo. Contraseña marcada como temporal para cambio obligatorio."
+        )
+
         db.commit()
 
         flash("Usuario creado correctamente.", "success")
@@ -869,15 +1015,14 @@ def admin_user_add():
     return render_template("admin_user_add.html")
 
 
-# =====================================================
-# ADMIN: USUARIOS (EDITAR)
-# =====================================================
 @app.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
 def admin_user_edit(user_id):
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
     db = get_db()
+    ensure_app_schema(db)
+
     u = db.execute(
         "SELECT id, nombre, usuario, rol, estado FROM users WHERE id = ?",
         (user_id,)
@@ -910,6 +1055,7 @@ def admin_user_edit(user_id):
             "SELECT id FROM users WHERE usuario = ? AND id <> ?",
             (usuario, user_id)
         ).fetchone()
+
         if existe:
             flash("Ese usuario ya está en uso por otra cuenta.", "warning")
             return redirect(url_for("admin_user_edit", user_id=user_id))
@@ -917,29 +1063,51 @@ def admin_user_edit(user_id):
         db.execute(
             """
             UPDATE users
-            SET contrasena_hash = ?, password_temporal = 1
-             WHERE id = ?
+            SET nombre = ?, usuario = ?, rol = ?, estado = ?
+            WHERE id = ?
             """,
-        (hash_pw, user_id)
+            (nombre, usuario, rol, estado, user_id)
         )
 
         if new_password:
-            hash_pw = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            errores_password = validar_contrasena_segura(new_password)
+
+            if errores_password:
+                flash(" ".join(errores_password), "warning")
+                return redirect(url_for("admin_user_edit", user_id=user_id))
+
+            hash_pw = bcrypt.hashpw(
+                new_password.encode("utf-8"),
+                bcrypt.gensalt()
+            ).decode("utf-8")
+
             db.execute(
-                "UPDATE users SET contrasena_hash = ? WHERE id = ?",
+                """
+                UPDATE users
+                SET contrasena_hash = ?, password_temporal = 1
+                WHERE id = ?
+                """,
                 (hash_pw, user_id)
             )
 
+            registrar_auditoria(
+                "Reset contraseña",
+                f"Usuario ID {user_id}. Nombre: {nombre}. Usuario: {usuario}. Se actualizó la contraseña y quedó marcada como temporal para cambio obligatorio en el próximo inicio de sesión."
+            )
+
+        registrar_auditoria(
+            "Editar usuario",
+            f"Usuario ID {user_id}. Nombre: {nombre}. Usuario: {usuario}. Rol: {rol}. Estado: {estado}."
+        )
+
         db.commit()
+
         flash("Usuario actualizado correctamente.", "success")
         return redirect(url_for("admin_users"))
 
     return render_template("admin_user_edit.html", u=u)
 
 
-# =====================================================
-# ADMIN: USUARIOS (BLOQUEAR / DESBLOQUEAR)
-# =====================================================
 @app.route("/admin/users/<int:user_id>/toggle", methods=["POST"])
 def admin_user_toggle(user_id):
     if "user_id" not in session or session.get("rol") != "admin":
@@ -950,29 +1118,39 @@ def admin_user_toggle(user_id):
         return redirect(url_for("admin_users"))
 
     db = get_db()
-    u = db.execute("SELECT id, estado FROM users WHERE id = ?", (user_id,)).fetchone()
+
+    u = db.execute(
+        "SELECT id, nombre, usuario, estado FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+
     if not u:
         flash("Usuario no encontrado.", "danger")
         return redirect(url_for("admin_users"))
 
     nuevo_estado = "activo" if u["estado"] == "bloqueado" else "bloqueado"
-    db.execute("UPDATE users SET estado = ? WHERE id = ?", (nuevo_estado, user_id))
+
+    db.execute(
+        "UPDATE users SET estado = ? WHERE id = ?",
+        (nuevo_estado, user_id)
+    )
+
+    registrar_auditoria(
+        "Cambiar estado usuario",
+        f"Usuario: {u['nombre']}. Código/usuario: {u['usuario']}. Nuevo estado: {nuevo_estado}."
+    )
+
     db.commit()
 
     flash(f"Estado actualizado a: {nuevo_estado}", "success")
     return redirect(url_for("admin_users"))
 
-# =====================================================
-# ADMIN: USUARIOS (ELIMINAR)
-# - Solo elimina usuarios sin historial de compras
-# - Si tiene órdenes, se debe bloquear para conservar trazabilidad
-# =====================================================
+
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
 def admin_user_delete(user_id):
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
-    # Evitar que el admin se elimine a sí mismo
     if session.get("user_id") == user_id:
         flash("No podés eliminar tu propia cuenta.", "warning")
         return redirect(url_for("admin_users"))
@@ -988,7 +1166,6 @@ def admin_user_delete(user_id):
         flash("Usuario no encontrado.", "danger")
         return redirect(url_for("admin_users"))
 
-    # Verificar si tiene compras registradas
     compras = db.execute(
         "SELECT COUNT(*) AS total FROM orders WHERE user_id = ?",
         (user_id,)
@@ -1002,7 +1179,6 @@ def admin_user_delete(user_id):
         )
         return redirect(url_for("admin_users"))
 
-    # Evitar eliminar el último administrador
     if user["rol"] == "admin":
         admins = db.execute(
             "SELECT COUNT(*) AS total FROM users WHERE rol = 'admin'"
@@ -1012,14 +1188,24 @@ def admin_user_delete(user_id):
             flash("No se puede eliminar el último administrador del sistema.", "warning")
             return redirect(url_for("admin_users"))
 
-    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.execute(
+        "DELETE FROM users WHERE id = ?",
+        (user_id,)
+    )
+
+    registrar_auditoria(
+        "Eliminar usuario",
+        f"Nombre: {user['nombre']}. Usuario: {user['usuario']}. Rol: {user['rol']}. Eliminado porque no tenía compras registradas."
+    )
+
     db.commit()
 
     flash(f"Usuario '{user['nombre']}' eliminado correctamente.", "success")
     return redirect(url_for("admin_users"))
 
+
 # =====================================================
-# MIS COMPRAS (HISTORIAL DEL USUARIO LOGUEADO)
+# MIS COMPRAS
 # =====================================================
 @app.route("/mis-compras")
 def mis_compras():
@@ -1030,9 +1216,7 @@ def mis_compras():
     user_id = session["user_id"]
     db = get_db()
 
-    pago = (request.args.get("pago") or "").strip().lower()
-    pago = pago.replace("é", "e")
-
+    pago = (request.args.get("pago") or "").strip().lower().replace("é", "e")
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
 
@@ -1040,7 +1224,7 @@ def mis_compras():
     params = [user_id]
 
     if pago in ("contado", "credito"):
-        where.append("lower(trim(o.tipo_pago)) = ?")
+        where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
         params.append(pago)
 
     if start:
@@ -1115,7 +1299,7 @@ def mis_compras_detalle(order_id):
 
 
 # =====================================================
-# ADMIN: HISTORIAL DE ÓRDENES (lista general con filtros)
+# ADMIN: HISTORIAL DE ÓRDENES
 # =====================================================
 @app.route("/admin/orders")
 def admin_orders():
@@ -1134,6 +1318,7 @@ def admin_orders():
 
     if not start:
         start = hace_14.strftime("%Y-%m-%d")
+
     if not end:
         end = hoy.strftime("%Y-%m-%d")
 
@@ -1145,8 +1330,8 @@ def admin_orders():
         params.append(estado)
 
     if pago:
-        where.append("o.tipo_pago = ?")
-        params.append(pago)
+        where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
+        params.append(pago.replace("é", "e"))
 
     if q:
         where.append("(u.nombre LIKE ? OR o.nombre_no_asociado LIKE ?)")
@@ -1161,6 +1346,7 @@ def admin_orders():
     where_sql = "WHERE " + " AND ".join(where)
 
     db = get_db()
+
     orders = db.execute(
         f"""
         SELECT
@@ -1184,24 +1370,15 @@ def admin_orders():
         end=end
     )
 
+
 # =====================================================
-# ADMIN: EXPORTAR HISTORIAL DE ÓRDENES A EXCEL
-# Ruta: /admin/orders/export
-# - Respeta filtros de admin_orders:
-#   estado, pago, q, start, end
-# - Si no hay fechas, usa últimos 14 días
-# - Genera 2 hojas:
-#   1) Órdenes
-#   2) Detalle productos
+# ADMIN: EXPORTAR HISTORIAL DE ÓRDENES
 # =====================================================
 @app.route("/admin/orders/export")
 def admin_orders_export():
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
-    # ----------------------------
-    # Inputs desde URL
-    # ----------------------------
     estado = (request.args.get("estado") or "").strip().lower()
     pago = (request.args.get("pago") or "").strip().lower().replace("é", "e")
     q = (request.args.get("q") or "").strip()
@@ -1209,9 +1386,6 @@ def admin_orders_export():
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
 
-    # ----------------------------
-    # Default: últimos 14 días
-    # ----------------------------
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
 
@@ -1221,9 +1395,6 @@ def admin_orders_export():
     if not end:
         end = hoy.strftime("%Y-%m-%d")
 
-    # ----------------------------
-    # WHERE dinámico
-    # ----------------------------
     where = []
     params = []
 
@@ -1249,9 +1420,6 @@ def admin_orders_export():
 
     db = get_db()
 
-    # ----------------------------
-    # Resumen
-    # ----------------------------
     resumen = db.execute(
         f"""
         SELECT
@@ -1272,9 +1440,6 @@ def admin_orders_export():
         params
     ).fetchone()
 
-    # ----------------------------
-    # Hoja 1: órdenes
-    # ----------------------------
     orders = db.execute(
         f"""
         SELECT
@@ -1292,9 +1457,6 @@ def admin_orders_export():
         params
     ).fetchall()
 
-    # ----------------------------
-    # Hoja 2: detalle de productos
-    # ----------------------------
     detalle = db.execute(
         f"""
         SELECT
@@ -1318,20 +1480,13 @@ def admin_orders_export():
         params
     ).fetchall()
 
-    # =====================================================
-    # CREAR EXCEL
-    # =====================================================
     wb = Workbook()
 
-    # =====================================================
-    # ESTILOS GENERALES
-    # =====================================================
     fill_header = PatternFill("solid", fgColor="1F2328")
     fill_title = PatternFill("solid", fgColor="EAF2F8")
     font_header = Font(color="FFFFFF", bold=True)
     font_title = Font(bold=True, size=14)
     font_bold = Font(bold=True)
-
     alignment_center = Alignment(horizontal="center", vertical="center")
     alignment_left = Alignment(horizontal="left", vertical="center")
 
@@ -1342,9 +1497,7 @@ def admin_orders_export():
         bottom=Side(style="thin", color="D9DEE3")
     )
 
-    # =====================================================
-    # HOJA 1: ÓRDENES
-    # =====================================================
+    # Hoja 1
     ws = wb.active
     ws.title = "Órdenes"
 
@@ -1354,7 +1507,6 @@ def admin_orders_export():
     ws["A1"].fill = fill_title
     ws["A1"].alignment = alignment_left
 
-    # Filtros aplicados
     ws["A3"] = "Desde"
     ws["B3"] = start
     ws["C3"] = "Hasta"
@@ -1372,20 +1524,16 @@ def admin_orders_export():
             cell.border = thin_border
             cell.alignment = alignment_center
 
-    # Resumen compacto
     ws["A6"] = "Resumen"
     ws["A6"].font = font_bold
     ws["A6"].fill = fill_title
 
     ws["A7"] = "Órdenes"
     ws["B7"] = resumen["num_ordenes"]
-
     ws["A8"] = "Total general"
     ws["B8"] = float(resumen["total_general"])
-
     ws["A9"] = "Contado"
     ws["B9"] = float(resumen["total_contado"])
-
     ws["A10"] = "Crédito"
     ws["B10"] = float(resumen["total_credito"])
 
@@ -1401,7 +1549,6 @@ def admin_orders_export():
     ws["B9"].number_format = '"₡"#,##0.00'
     ws["B10"].number_format = '"₡"#,##0.00'
 
-    # Tabla de órdenes
     start_row = 12
     headers = ["Orden", "Fecha", "Comprador", "Pago", "Estado", "Total"]
 
@@ -1429,7 +1576,6 @@ def admin_orders_export():
             cell.alignment = alignment_left
 
         ws.cell(row=current_row, column=6).number_format = '"₡"#,##0.00'
-
         current_row += 1
 
     if not orders:
@@ -1447,9 +1593,7 @@ def admin_orders_export():
     ws.freeze_panes = "A13"
     ws.auto_filter.ref = f"A{start_row}:F{max(start_row, current_row - 1)}"
 
-    # =====================================================
-    # HOJA 2: DETALLE PRODUCTOS
-    # =====================================================
+    # Hoja 2
     ws2 = wb.create_sheet("Detalle productos")
 
     ws2.merge_cells("A1:J1")
@@ -1459,16 +1603,8 @@ def admin_orders_export():
     ws2["A1"].alignment = alignment_left
 
     headers_detalle = [
-        "Orden",
-        "Fecha",
-        "Comprador",
-        "Pago",
-        "Estado",
-        "Total orden",
-        "Producto",
-        "Cantidad",
-        "Precio unitario",
-        "Subtotal"
+        "Orden", "Fecha", "Comprador", "Pago", "Estado",
+        "Total orden", "Producto", "Cantidad", "Precio unitario", "Subtotal"
     ]
 
     start_row_detalle = 3
@@ -1511,28 +1647,17 @@ def admin_orders_export():
         ws2.cell(row=current_row, column=1).value = "Sin detalle de productos para los filtros seleccionados."
         ws2.cell(row=current_row, column=1).alignment = alignment_center
 
-    column_widths_detalle = {
-        "A": 12,
-        "B": 22,
-        "C": 35,
-        "D": 15,
-        "E": 15,
-        "F": 16,
-        "G": 35,
-        "H": 12,
-        "I": 18,
-        "J": 16,
+    widths = {
+        "A": 12, "B": 22, "C": 35, "D": 15, "E": 15,
+        "F": 16, "G": 35, "H": 12, "I": 18, "J": 16
     }
 
-    for col_letter, width in column_widths_detalle.items():
+    for col_letter, width in widths.items():
         ws2.column_dimensions[col_letter].width = width
 
     ws2.freeze_panes = "A4"
     ws2.auto_filter.ref = f"A{start_row_detalle}:J{max(start_row_detalle, current_row - 1)}"
 
-    # =====================================================
-    # DESCARGA
-    # =====================================================
     output = BytesIO()
     wb.save(output)
     output.seek(0)
@@ -1545,6 +1670,7 @@ def admin_orders_export():
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 # =====================================================
 # ADMIN: DETALLE DE ORDEN
@@ -1599,7 +1725,7 @@ def admin_order_detail(order_id):
 
 
 # =====================================================
-# ADMIN: LISTA DE COMPRADORES
+# ADMIN: COMPRADORES
 # =====================================================
 @app.route("/admin/buyers")
 def admin_buyers():
@@ -1644,11 +1770,6 @@ def admin_buyers():
     return render_template("admin_buyers.html", buyers=buyers)
 
 
-# =====================================================
-# ADMIN: HISTORIAL POR COMPRADOR
-# - Muestra órdenes de un comprador
-# - Filtra automáticamente últimos 14 días si no se envían fechas
-# =====================================================
 @app.route("/admin/buyer")
 def admin_buyer_history():
     if "user_id" not in session or session.get("rol") != "admin":
@@ -1662,12 +1783,6 @@ def admin_buyer_history():
         flash("Comprador inválido.", "danger")
         return redirect(url_for("admin_buyers"))
 
-    # =====================================================
-    # DEFAULT: últimos 14 días
-    # Si no se envían fechas, se carga automáticamente
-    # desde hace 13 días hasta hoy.
-    # Ejemplo: si hoy es 26, muestra del 13 al 26.
-    # =====================================================
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
 
@@ -1685,9 +1800,6 @@ def admin_buyer_history():
     comprador_nombre = ""
     comprador_tipo = ""
 
-    # =====================================================
-    # Comprador registrado
-    # =====================================================
     if key.startswith("u:"):
         comprador_tipo = "registrado"
         user_id = key.split(":", 1)[1]
@@ -1702,9 +1814,6 @@ def admin_buyer_history():
 
         comprador_nombre = u["nombre"] if u else "Usuario"
 
-    # =====================================================
-    # Comprador no asociado
-    # =====================================================
     elif key.startswith("na:"):
         comprador_tipo = "no_asociado"
         nombre = key.split(":", 1)[1]
@@ -1719,11 +1828,6 @@ def admin_buyer_history():
         flash("Comprador inválido.", "danger")
         return redirect(url_for("admin_buyers"))
 
-    # =====================================================
-    # Filtro de fechas
-    # Siempre se aplica, porque si no vienen fechas,
-    # arriba ya se asignaron los últimos 14 días.
-    # =====================================================
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -1760,8 +1864,236 @@ def admin_buyer_history():
         end=end
     )
 
+
+@app.route("/admin/buyer/export")
+def admin_buyer_history_export():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    key = request.args.get("key", "").strip()
+    start = request.args.get("start", "").strip()
+    end = request.args.get("end", "").strip()
+
+    if not key:
+        flash("Comprador inválido para exportar.", "danger")
+        return redirect(url_for("admin_buyers"))
+
+    hoy = datetime.now().date()
+    hace_14 = hoy - timedelta(days=13)
+
+    if not start:
+        start = hace_14.strftime("%Y-%m-%d")
+
+    if not end:
+        end = hoy.strftime("%Y-%m-%d")
+
+    db = get_db()
+
+    where = []
+    params = []
+
+    comprador_nombre = ""
+    comprador_tipo = ""
+
+    if key.startswith("u:"):
+        comprador_tipo = "registrado"
+        user_id = key.split(":", 1)[1]
+
+        where.append("o.user_id = ?")
+        params.append(user_id)
+
+        u = db.execute(
+            "SELECT nombre FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+
+        comprador_nombre = u["nombre"] if u else "Usuario"
+
+    elif key.startswith("na:"):
+        comprador_tipo = "no asociado"
+        nombre = key.split(":", 1)[1]
+
+        where.append("o.user_id IS NULL")
+        where.append("o.nombre_no_asociado = ?")
+        params.append(nombre)
+
+        comprador_nombre = nombre
+
+    else:
+        flash("Comprador inválido para exportar.", "danger")
+        return redirect(url_for("admin_buyers"))
+
+    where.append("date(o.fecha) >= date(?)")
+    params.append(start)
+
+    where.append("date(o.fecha) <= date(?)")
+    params.append(end)
+
+    where_sql = "WHERE " + " AND ".join(where)
+
+    resumen = db.execute(
+        f"""
+        SELECT
+            COUNT(o.id) AS num_ordenes,
+            COALESCE(SUM(o.total), 0) AS total_acumulado
+        FROM orders o
+        {where_sql}
+        """,
+        params
+    ).fetchone()
+
+    rows = db.execute(
+        f"""
+        SELECT
+            o.id AS order_id,
+            o.fecha,
+            o.tipo_pago,
+            o.estado,
+            o.total AS total_orden,
+            COALESCE(p.nombre, 'Sin producto') AS producto,
+            COALESCE(oi.cantidad, 0) AS cantidad,
+            COALESCE(oi.precio_unitario, 0) AS precio_unitario,
+            COALESCE((oi.cantidad * oi.precio_unitario), 0) AS subtotal
+        FROM orders o
+        LEFT JOIN order_items oi ON oi.order_id = o.id
+        LEFT JOIN products p ON p.id = oi.product_id
+        {where_sql}
+        ORDER BY o.fecha DESC, o.id DESC, p.nombre ASC
+        """,
+        params
+    ).fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Historial comprador"
+
+    fill_header = PatternFill("solid", fgColor="1F2328")
+    fill_title = PatternFill("solid", fgColor="EAF2F8")
+    font_header = Font(color="FFFFFF", bold=True)
+    font_title = Font(bold=True, size=14)
+    font_bold = Font(bold=True)
+    alignment_center = Alignment(horizontal="center", vertical="center")
+    alignment_left = Alignment(horizontal="left", vertical="center")
+
+    thin_border = Border(
+        left=Side(style="thin", color="D9DEE3"),
+        right=Side(style="thin", color="D9DEE3"),
+        top=Side(style="thin", color="D9DEE3"),
+        bottom=Side(style="thin", color="D9DEE3")
+    )
+
+    ws.merge_cells("A1:I1")
+    ws["A1"] = "Historial de compras por comprador - ASERVE"
+    ws["A1"].font = font_title
+    ws["A1"].fill = fill_title
+    ws["A1"].alignment = alignment_left
+
+    ws["A3"] = "Comprador"
+    ws["B3"] = comprador_nombre
+    ws["A4"] = "Tipo"
+    ws["B4"] = comprador_tipo
+    ws["A5"] = "Desde"
+    ws["B5"] = start
+    ws["A6"] = "Hasta"
+    ws["B6"] = end
+
+    ws["A8"] = "Resumen"
+    ws["A8"].font = font_bold
+    ws["A8"].fill = fill_title
+
+    ws["A9"] = "Órdenes"
+    ws["B9"] = resumen["num_ordenes"]
+
+    ws["A10"] = "Total acumulado"
+    ws["B10"] = float(resumen["total_acumulado"])
+    ws["B10"].number_format = '"₡"#,##0.00'
+
+    for row in ws.iter_rows(min_row=3, max_row=10, min_col=1, max_col=2):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = alignment_left
+
+    for row in range(3, 11):
+        ws.cell(row=row, column=1).font = font_bold
+
+    start_row = 12
+
+    headers = [
+        "Orden", "Fecha", "Tipo de pago", "Estado", "Total orden",
+        "Producto", "Cantidad", "Precio unitario", "Subtotal"
+    ]
+
+    for col_num, header in enumerate(headers, start=1):
+        cell = ws.cell(row=start_row, column=col_num)
+        cell.value = header
+        cell.fill = fill_header
+        cell.font = font_header
+        cell.alignment = alignment_center
+        cell.border = thin_border
+
+    current_row = start_row + 1
+
+    for r in rows:
+        ws.cell(row=current_row, column=1).value = f"#{r['order_id']}"
+        ws.cell(row=current_row, column=2).value = r["fecha"]
+        ws.cell(row=current_row, column=3).value = r["tipo_pago"]
+        ws.cell(row=current_row, column=4).value = r["estado"]
+        ws.cell(row=current_row, column=5).value = float(r["total_orden"])
+        ws.cell(row=current_row, column=6).value = r["producto"]
+        ws.cell(row=current_row, column=7).value = int(r["cantidad"])
+        ws.cell(row=current_row, column=8).value = float(r["precio_unitario"])
+        ws.cell(row=current_row, column=9).value = float(r["subtotal"])
+
+        for col in range(1, 10):
+            cell = ws.cell(row=current_row, column=col)
+            cell.border = thin_border
+            cell.alignment = alignment_left
+
+        ws.cell(row=current_row, column=5).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=8).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=9).number_format = '"₡"#,##0.00'
+
+        current_row += 1
+
+    if not rows:
+        ws.merge_cells(
+            start_row=current_row,
+            start_column=1,
+            end_row=current_row,
+            end_column=9
+        )
+        ws.cell(row=current_row, column=1).value = "Sin datos para este comprador."
+        ws.cell(row=current_row, column=1).alignment = alignment_center
+        ws.cell(row=current_row, column=1).border = thin_border
+
+    widths = {
+        "A": 12, "B": 22, "C": 16, "D": 14, "E": 16,
+        "F": 35, "G": 12, "H": 18, "I": 16
+    }
+
+    for col_letter, width in widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    ws.freeze_panes = "A13"
+    ws.auto_filter.ref = f"A{start_row}:I{max(start_row, current_row - 1)}"
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    safe_name = secure_filename(comprador_nombre) or "comprador"
+    filename = f"historial_comprador_{safe_name}.xlsx"
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
 # =====================================================
-# ADMIN: CRÉDITOS (RESUMEN)
+# ADMIN: CRÉDITOS
 # =====================================================
 @app.route("/admin/credits")
 def admin_credits():
@@ -1790,9 +2122,6 @@ def admin_credits():
     return render_template("admin_credits.html", creditos=creditos)
 
 
-# =====================================================
-# ADMIN: CRÉDITOS POR COLABORADOR
-# =====================================================
 @app.route("/admin/credits/user/<int:user_id>")
 def admin_credits_user(user_id):
     if "user_id" not in session or session.get("rol") != "admin":
@@ -1800,7 +2129,11 @@ def admin_credits_user(user_id):
 
     db = get_db()
 
-    user = db.execute("SELECT id, nombre FROM users WHERE id = ?", (user_id,)).fetchone()
+    user = db.execute(
+        "SELECT id, nombre FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+
     if not user:
         flash("Colaborador no encontrado.", "danger")
         return redirect(url_for("admin_credits"))
@@ -1827,9 +2160,6 @@ def admin_credits_user(user_id):
     )
 
 
-# =====================================================
-# ADMIN: PAGAR CRÉDITOS EN BLOQUE
-# =====================================================
 @app.route("/admin/credits/user/<int:user_id>/pay-bulk", methods=["POST"])
 def admin_credits_pay_bulk(user_id):
     if "user_id" not in session or session.get("rol") != "admin":
@@ -1855,11 +2185,24 @@ def admin_credits_pay_bulk(user_id):
         UPDATE orders
         SET estado = 'pagada'
         WHERE user_id = ?
-          AND lower(trim(tipo_pago)) IN ('credito', 'crédito')
+          AND replace(lower(trim(tipo_pago)), 'é', 'e') = 'credito'
           AND lower(trim(estado)) = 'pendiente'
           AND id IN ({placeholders})
         """,
         [user_id] + order_ids_int
+    )
+
+    comprador = db.execute(
+        "SELECT nombre FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+
+    comprador_nombre = comprador["nombre"] if comprador else f"Usuario ID {user_id}"
+    ordenes_txt = ", ".join([f"#{oid}" for oid in order_ids_int])
+
+    registrar_auditoria(
+        "Pagar créditos en bloque",
+        f"Comprador: {comprador_nombre}. Órdenes pagadas: {ordenes_txt}. Total de órdenes actualizadas: {cur.rowcount}."
     )
 
     db.commit()
@@ -1868,9 +2211,6 @@ def admin_credits_pay_bulk(user_id):
     return redirect(url_for("admin_credits_user", user_id=user_id))
 
 
-# =====================================================
-# ADMIN: PAGAR CRÉDITO INDIVIDUAL
-# =====================================================
 @app.route("/admin/credits/pay/<int:order_id>", methods=["POST"])
 def admin_credits_pay(order_id):
     if "user_id" not in session or session.get("rol") != "admin":
@@ -1880,11 +2220,16 @@ def admin_credits_pay(order_id):
 
     orden = db.execute(
         """
-        SELECT id, user_id
-        FROM orders
-        WHERE id = ?
-          AND replace(lower(trim(tipo_pago)), 'é', 'e') = 'credito'
-          AND lower(trim(estado)) = 'pendiente'
+        SELECT
+            o.id,
+            o.user_id,
+            o.total,
+            u.nombre AS comprador
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        WHERE o.id = ?
+          AND replace(lower(trim(o.tipo_pago)), 'é', 'e') = 'credito'
+          AND lower(trim(o.estado)) = 'pendiente'
         """,
         (order_id,)
     ).fetchone()
@@ -1893,7 +2238,18 @@ def admin_credits_pay(order_id):
         flash("Esa orden no existe o ya fue pagada.", "warning")
         return redirect(url_for("admin_credits"))
 
-    db.execute("UPDATE orders SET estado = 'pagada' WHERE id = ?", (order_id,))
+    db.execute(
+        "UPDATE orders SET estado = 'pagada' WHERE id = ?",
+        (order_id,)
+    )
+
+    comprador_nombre = orden["comprador"] if orden["comprador"] else f"Usuario ID {orden['user_id']}"
+
+    registrar_auditoria(
+        "Pagar crédito",
+        f"Orden #{order_id} marcada como pagada. Comprador: {comprador_nombre}. Monto: ₡{float(orden['total']):,.2f}."
+    )
+
     db.commit()
 
     flash(f"Orden #{order_id} marcada como pagada.", "success")
@@ -1901,7 +2257,7 @@ def admin_credits_pay(order_id):
 
 
 # =====================================================
-# ADMIN: STOCK
+# ADMIN: STOCK Y PRODUCTOS
 # =====================================================
 @app.route("/admin/stock")
 def admin_stock():
@@ -1911,6 +2267,7 @@ def admin_stock():
     only_low = (request.args.get("only_low") or "").strip() == "1"
 
     db = get_db()
+
     productos = db.execute(
         """
         SELECT id, nombre, stock, stock_minimo, activo
@@ -1920,6 +2277,7 @@ def admin_stock():
     ).fetchall()
 
     bajos = []
+
     for p in productos:
         if int(p["activo"]) == 1 and int(p["stock_minimo"]) > 0 and int(p["stock"]) <= int(p["stock_minimo"]):
             bajos.append(p)
@@ -1935,12 +2293,8 @@ def admin_stock():
     )
 
 
-# =====================================================
-# ADMIN: PRODUCTOS
-# =====================================================
 @app.route("/admin/products")
 def admin_products():
-    # Seguridad: solo admin
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
@@ -1973,7 +2327,6 @@ def admin_product_add():
         stock = (request.form.get("stock") or "").strip()
         stock_minimo = (request.form.get("stock_minimo") or "0").strip()
         activo = 1 if request.form.get("activo") == "on" else 0
-
         imagen = request.files.get("imagen")
 
         if not nombre or not precio or not stock:
@@ -1984,30 +2337,46 @@ def admin_product_add():
             precio_num = float(precio)
             stock_num = int(stock)
             stock_minimo_num = int(stock_minimo)
+
             if precio_num < 0 or stock_num < 0 or stock_minimo_num < 0:
                 flash("Precio/stock no pueden ser negativos.", "danger")
                 return redirect(url_for("admin_product_add"))
+
         except ValueError:
             flash("Precio debe ser número y stock/stock mínimo deben ser enteros.", "danger")
             return redirect(url_for("admin_product_add"))
 
         image_filename = None
+
         if imagen and imagen.filename:
             if not allowed_file(imagen.filename):
                 flash("Formato de imagen no permitido.", "danger")
                 return redirect(url_for("admin_product_add"))
 
-            filename = secure_filename(imagen.filename)
-            unique_name = f"{int(datetime.now().timestamp())}_{filename}"
-            os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-            imagen.save(os.path.join(app.config["UPLOAD_FOLDER"], unique_name))
+            filename_img = secure_filename(imagen.filename)
+            unique_name = f"{int(datetime.now().timestamp())}_{filename_img}"
+
+            upload_folder_abs = app.config["UPLOAD_FOLDER"]
+            os.makedirs(upload_folder_abs, exist_ok=True)
+
+            imagen.save(os.path.join(upload_folder_abs, unique_name))
             image_filename = unique_name
 
         db = get_db()
-        db.execute("""
+
+        db.execute(
+            """
             INSERT INTO products (nombre, precio, stock, stock_minimo, activo, image_filename)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (nombre, precio_num, stock_num, stock_minimo_num, activo, image_filename))
+            """,
+            (nombre, precio_num, stock_num, stock_minimo_num, activo, image_filename)
+        )
+
+        registrar_auditoria(
+            "Crear producto",
+            f"Producto: {nombre}. Precio: ₡{precio_num:,.2f}. Stock inicial: {stock_num}. Stock mínimo: {stock_minimo_num}. Estado: {'activo' if activo == 1 else 'inactivo'}."
+        )
+
         db.commit()
 
         flash("✅ Producto agregado.", "success")
@@ -2022,11 +2391,15 @@ def admin_product_edit(product_id):
         return redirect(url_for("login"))
 
     db = get_db()
-    p = db.execute("""
+
+    p = db.execute(
+        """
         SELECT id, nombre, precio, stock, stock_minimo, activo, image_filename
         FROM products
         WHERE id = ?
-    """, (product_id,)).fetchone()
+        """,
+        (product_id,)
+    ).fetchone()
 
     if not p:
         flash("Producto no encontrado.", "danger")
@@ -2038,7 +2411,6 @@ def admin_product_edit(product_id):
         stock = (request.form.get("stock") or "").strip()
         stock_minimo = (request.form.get("stock_minimo") or "0").strip()
         activo = 1 if request.form.get("activo") == "on" else 0
-
         imagen = request.files.get("imagen")
 
         if not nombre or not precio or not stock:
@@ -2049,30 +2421,45 @@ def admin_product_edit(product_id):
             precio_num = float(precio)
             stock_num = int(stock)
             stock_minimo_num = int(stock_minimo)
+
             if precio_num < 0 or stock_num < 0 or stock_minimo_num < 0:
                 flash("Precio/stock no pueden ser negativos.", "danger")
                 return redirect(url_for("admin_product_edit", product_id=product_id))
+
         except ValueError:
             flash("Precio debe ser número y stock/stock mínimo deben ser enteros.", "danger")
             return redirect(url_for("admin_product_edit", product_id=product_id))
 
         image_filename = p["image_filename"]
+
         if imagen and imagen.filename:
             if not allowed_file(imagen.filename):
                 flash("Formato de imagen no permitido.", "danger")
                 return redirect(url_for("admin_product_edit", product_id=product_id))
 
-            filename = secure_filename(imagen.filename)
-            unique_name = f"{int(datetime.now().timestamp())}_{filename}"
-            os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-            imagen.save(os.path.join(app.config["UPLOAD_FOLDER"], unique_name))
+            filename_img = secure_filename(imagen.filename)
+            unique_name = f"{int(datetime.now().timestamp())}_{filename_img}"
+
+            upload_folder_abs = app.config["UPLOAD_FOLDER"]
+            os.makedirs(upload_folder_abs, exist_ok=True)
+
+            imagen.save(os.path.join(upload_folder_abs, unique_name))
             image_filename = unique_name
 
-        db.execute("""
+        db.execute(
+            """
             UPDATE products
             SET nombre = ?, precio = ?, stock = ?, stock_minimo = ?, activo = ?, image_filename = ?
             WHERE id = ?
-        """, (nombre, precio_num, stock_num, stock_minimo_num, activo, image_filename, product_id))
+            """,
+            (nombre, precio_num, stock_num, stock_minimo_num, activo, image_filename, product_id)
+        )
+
+        registrar_auditoria(
+            "Editar producto",
+            f"Producto ID {product_id}. Nombre: {nombre}. Precio: ₡{precio_num:,.2f}. Stock: {stock_num}. Stock mínimo: {stock_minimo_num}. Estado: {'activo' if activo == 1 else 'inactivo'}."
+        )
+
         db.commit()
 
         flash("✅ Producto actualizado.", "success")
@@ -2082,7 +2469,7 @@ def admin_product_edit(product_id):
 
 
 # =====================================================
-# ADMIN: REPORTE VENTAS POR PERIODO
+# REPORTES
 # =====================================================
 @app.route("/admin/reports/sales")
 def admin_report_sales():
@@ -2092,8 +2479,7 @@ def admin_report_sales():
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
 
-    pago = (request.args.get("pago") or "").strip().lower()
-    pago = pago.replace("é", "e")
+    pago = (request.args.get("pago") or "").strip().lower().replace("é", "e")
 
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
@@ -2143,7 +2529,11 @@ def admin_report_sales():
     orders = db.execute(
         f"""
         SELECT
-            o.id, o.fecha, o.tipo_pago, o.estado, o.total,
+            o.id,
+            o.fecha,
+            o.tipo_pago,
+            o.estado,
+            o.total,
             COALESCE(u.nombre, o.nombre_no_asociado, 'Sin nombre') AS comprador
         FROM orders o
         LEFT JOIN users u ON u.id = o.user_id
@@ -2163,9 +2553,6 @@ def admin_report_sales():
     )
 
 
-# =====================================================
-# ADMIN: EXPORTAR REPORTE DE VENTAS A EXCEL
-# =====================================================
 @app.route("/admin/reports/sales/export")
 def admin_report_sales_export():
     if "user_id" not in session or session.get("rol") != "admin":
@@ -2173,9 +2560,7 @@ def admin_report_sales_export():
 
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
-
-    pago = (request.args.get("pago") or "").strip().lower()
-    pago = pago.replace("é", "e")
+    pago = (request.args.get("pago") or "").strip().lower().replace("é", "e")
 
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
@@ -2239,7 +2624,6 @@ def admin_report_sales_export():
         params
     ).fetchall()
 
-    # Crear archivo Excel
     wb = Workbook()
     ws = wb.active
     ws.title = "Reporte ventas"
@@ -2251,6 +2635,7 @@ def admin_report_sales_export():
     font_bold = Font(bold=True)
     alignment_center = Alignment(horizontal="center", vertical="center")
     alignment_left = Alignment(horizontal="left", vertical="center")
+
     thin_border = Border(
         left=Side(style="thin", color="D9DEE3"),
         right=Side(style="thin", color="D9DEE3"),
@@ -2258,14 +2643,12 @@ def admin_report_sales_export():
         bottom=Side(style="thin", color="D9DEE3")
     )
 
-        # Encabezado del reporte
     ws.merge_cells("A1:F1")
     ws["A1"] = "Reporte de ventas - ASERVE"
     ws["A1"].font = font_title
     ws["A1"].fill = fill_title
     ws["A1"].alignment = alignment_left
 
-    # Filtros aplicados
     ws["A3"] = "Desde"
     ws["B3"] = start
     ws["C3"] = "Hasta"
@@ -2278,7 +2661,6 @@ def admin_report_sales_export():
         cell.alignment = alignment_center
         cell.font = font_bold
 
-    # Resumen compacto
     ws["A5"] = "Resumen"
     ws["A5"].font = font_bold
     ws["A5"].fill = fill_title
@@ -2301,24 +2683,13 @@ def admin_report_sales_export():
             cell.border = thin_border
             cell.alignment = alignment_left
 
-    for row in range(6, 10):
-        ws.cell(row=row, column=1).font = font_bold
+    for row_num in range(6, 10):
+        ws.cell(row=row_num, column=1).font = font_bold
 
     ws["B7"].number_format = '"₡"#,##0.00'
     ws["B8"].number_format = '"₡"#,##0.00'
     ws["B9"].number_format = '"₡"#,##0.00'
-    for row in ws.iter_rows(min_row=5, max_row=6, min_col=1, max_col=6):
-        for cell in row:
-            cell.border = thin_border
-            cell.alignment = alignment_center
-            if cell.column in (1, 3, 5):
-                cell.font = font_bold
 
-    ws["D5"].number_format = '"₡"#,##0.00'
-    ws["F5"].number_format = '"₡"#,##0.00'
-    ws["B6"].number_format = '##0'
-
-    # Tabla de órdenes
     start_row = 11
     headers = ["Orden", "Fecha", "Comprador", "Pago", "Estado", "Total"]
 
@@ -2346,7 +2717,6 @@ def admin_report_sales_export():
             cell.alignment = alignment_left
 
         ws.cell(row=current_row, column=6).number_format = '"₡"#,##0.00'
-
         current_row += 1
 
     if not orders:
@@ -2354,7 +2724,7 @@ def admin_report_sales_export():
         ws.cell(row=current_row, column=1).value = "Sin datos para el filtro seleccionado."
         ws.cell(row=current_row, column=1).alignment = alignment_center
 
-    column_widths = {
+    widths = {
         "A": 12,
         "B": 22,
         "C": 35,
@@ -2363,7 +2733,7 @@ def admin_report_sales_export():
         "F": 16,
     }
 
-    for col_letter, width in column_widths.items():
+    for col_letter, width in widths.items():
         ws.column_dimensions[col_letter].width = width
 
     ws.freeze_panes = "A12"
@@ -2381,299 +2751,15 @@ def admin_report_sales_export():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-# =====================================================
-# ADMIN: EXPORTAR HISTORIAL POR COMPRADOR A EXCEL
-# Ruta: /admin/buyer/export?key=...&start=...&end=...
-# - Exporta todas las órdenes de un comprador
-# - Incluye detalle de artículos comprados por orden
-# =====================================================
-@app.route("/admin/buyer/export")
-def admin_buyer_history_export():
-    if "user_id" not in session or session.get("rol") != "admin":
-        return redirect(url_for("login"))
 
-    key = request.args.get("key", "").strip()
-    start = request.args.get("start", "").strip()
-    end = request.args.get("end", "").strip()
-
-    if not key:
-        flash("Comprador inválido para exportar.", "danger")
-        return redirect(url_for("admin_buyers"))
-
-    db = get_db()
-
-    where = []
-    params = []
-
-    comprador_nombre = ""
-    comprador_tipo = ""
-
-    # ----------------------------
-    # Identificar comprador
-    # ----------------------------
-    if key.startswith("u:"):
-        comprador_tipo = "registrado"
-        user_id = key.split(":", 1)[1]
-
-        where.append("o.user_id = ?")
-        params.append(user_id)
-
-        u = db.execute(
-            "SELECT nombre FROM users WHERE id = ?",
-            (user_id,)
-        ).fetchone()
-
-        comprador_nombre = u["nombre"] if u else "Usuario"
-
-    elif key.startswith("na:"):
-        comprador_tipo = "no asociado"
-        nombre = key.split(":", 1)[1]
-
-        where.append("o.user_id IS NULL")
-        where.append("o.nombre_no_asociado = ?")
-        params.append(nombre)
-
-        comprador_nombre = nombre
-
-    else:
-        flash("Comprador inválido para exportar.", "danger")
-        return redirect(url_for("admin_buyers"))
-
-    # ----------------------------
-    # Filtro por fechas
-    # ----------------------------
-    if start:
-        where.append("date(o.fecha) >= date(?)")
-        params.append(start)
-
-    if end:
-        where.append("date(o.fecha) <= date(?)")
-        params.append(end)
-
-    where_sql = "WHERE " + " AND ".join(where)
-
-    # ----------------------------
-    # Resumen del comprador
-    # ----------------------------
-    resumen = db.execute(
-        f"""
-        SELECT
-            COUNT(o.id) AS num_ordenes,
-            COALESCE(SUM(o.total), 0) AS total_acumulado
-        FROM orders o
-        {where_sql}
-        """,
-        params
-    ).fetchone()
-
-    # ----------------------------
-    # Detalle con productos comprados
-    # ----------------------------
-    rows = db.execute(
-        f"""
-        SELECT
-            o.id AS order_id,
-            o.fecha,
-            o.tipo_pago,
-            o.estado,
-            o.total AS total_orden,
-            COALESCE(p.nombre, 'Sin producto') AS producto,
-            COALESCE(oi.cantidad, 0) AS cantidad,
-            COALESCE(oi.precio_unitario, 0) AS precio_unitario,
-            COALESCE((oi.cantidad * oi.precio_unitario), 0) AS subtotal
-        FROM orders o
-        LEFT JOIN order_items oi ON oi.order_id = o.id
-        LEFT JOIN products p ON p.id = oi.product_id
-        {where_sql}
-        ORDER BY o.fecha DESC, o.id DESC, p.nombre ASC
-        """,
-        params
-    ).fetchall()
-
-    # =====================================================
-    # CREAR EXCEL
-    # =====================================================
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Historial comprador"
-
-    # Estilos
-    fill_header = PatternFill("solid", fgColor="1F2328")
-    fill_title = PatternFill("solid", fgColor="EAF2F8")
-    font_header = Font(color="FFFFFF", bold=True)
-    font_title = Font(bold=True, size=14)
-    font_bold = Font(bold=True)
-    alignment_center = Alignment(horizontal="center", vertical="center")
-    alignment_left = Alignment(horizontal="left", vertical="center")
-    thin_border = Border(
-        left=Side(style="thin", color="D9DEE3"),
-        right=Side(style="thin", color="D9DEE3"),
-        top=Side(style="thin", color="D9DEE3"),
-        bottom=Side(style="thin", color="D9DEE3")
-    )
-
-    # ----------------------------
-    # Título
-    # ----------------------------
-    ws.merge_cells("A1:I1")
-    ws["A1"] = "Historial de compras por comprador - ASERVE"
-    ws["A1"].font = font_title
-    ws["A1"].fill = fill_title
-    ws["A1"].alignment = alignment_left
-
-    # ----------------------------
-    # Datos del comprador
-    # ----------------------------
-    ws["A3"] = "Comprador"
-    ws["B3"] = comprador_nombre
-
-    ws["A4"] = "Tipo"
-    ws["B4"] = comprador_tipo
-
-    ws["A5"] = "Desde"
-    ws["B5"] = start if start else "Inicio"
-
-    ws["A6"] = "Hasta"
-    ws["B6"] = end if end else "Final"
-
-    ws["A8"] = "Resumen"
-    ws["A8"].font = font_bold
-    ws["A8"].fill = fill_title
-
-    ws["A9"] = "Órdenes"
-    ws["B9"] = resumen["num_ordenes"]
-
-    ws["A10"] = "Total acumulado"
-    ws["B10"] = float(resumen["total_acumulado"])
-    ws["B10"].number_format = '"₡"#,##0.00'
-
-    for row in ws.iter_rows(min_row=3, max_row=10, min_col=1, max_col=2):
-        for cell in row:
-            cell.border = thin_border
-            cell.alignment = alignment_left
-
-    for row in range(3, 11):
-        ws.cell(row=row, column=1).font = font_bold
-
-    # ----------------------------
-    # Tabla de detalle
-    # ----------------------------
-    start_row = 12
-
-    headers = [
-        "Orden",
-        "Fecha",
-        "Tipo de pago",
-        "Estado",
-        "Total orden",
-        "Producto",
-        "Cantidad",
-        "Precio unitario",
-        "Subtotal"
-    ]
-
-    for col_num, header in enumerate(headers, start=1):
-        cell = ws.cell(row=start_row, column=col_num)
-        cell.value = header
-        cell.fill = fill_header
-        cell.font = font_header
-        cell.alignment = alignment_center
-        cell.border = thin_border
-
-    current_row = start_row + 1
-
-    for r in rows:
-        ws.cell(row=current_row, column=1).value = f"#{r['order_id']}"
-        ws.cell(row=current_row, column=2).value = r["fecha"]
-        ws.cell(row=current_row, column=3).value = r["tipo_pago"]
-        ws.cell(row=current_row, column=4).value = r["estado"]
-        ws.cell(row=current_row, column=5).value = float(r["total_orden"])
-        ws.cell(row=current_row, column=6).value = r["producto"]
-        ws.cell(row=current_row, column=7).value = int(r["cantidad"])
-        ws.cell(row=current_row, column=8).value = float(r["precio_unitario"])
-        ws.cell(row=current_row, column=9).value = float(r["subtotal"])
-
-        for col in range(1, 10):
-            cell = ws.cell(row=current_row, column=col)
-            cell.border = thin_border
-            cell.alignment = alignment_left
-
-        ws.cell(row=current_row, column=5).number_format = '"₡"#,##0.00'
-        ws.cell(row=current_row, column=8).number_format = '"₡"#,##0.00'
-        ws.cell(row=current_row, column=9).number_format = '"₡"#,##0.00'
-
-        current_row += 1
-
-    if not rows:
-        ws.merge_cells(
-            start_row=current_row,
-            start_column=1,
-            end_row=current_row,
-            end_column=9
-        )
-        ws.cell(row=current_row, column=1).value = "Sin datos para este comprador."
-        ws.cell(row=current_row, column=1).alignment = alignment_center
-        ws.cell(row=current_row, column=1).border = thin_border
-
-    # ----------------------------
-    # Ajustes visuales
-    # ----------------------------
-    column_widths = {
-        "A": 12,
-        "B": 22,
-        "C": 16,
-        "D": 14,
-        "E": 16,
-        "F": 35,
-        "G": 12,
-        "H": 18,
-        "I": 16,
-    }
-
-    for col_letter, width in column_widths.items():
-        ws.column_dimensions[col_letter].width = width
-
-    ws.freeze_panes = "A13"
-    ws.auto_filter.ref = f"A{start_row}:I{current_row - 1}"
-
-    # ----------------------------
-    # Descargar archivo
-    # ----------------------------
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-
-    safe_name = secure_filename(comprador_nombre) or "comprador"
-    filename = f"historial_comprador_{safe_name}.xlsx"
-
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-# =====================================================
-# ADMIN: TOP PRODUCTOS
-# Ruta: /admin/reports/top-products
-# - Muestra los productos más vendidos
-# - Filtra automáticamente últimos 14 días si no se envían fechas
-# =====================================================
 @app.route("/admin/reports/top-products")
 def admin_report_top_products():
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
-    # ----------------------------
-    # Fechas desde formulario
-    # ----------------------------
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
 
-    # ----------------------------
-    # Default: últimos 14 días
-    # Ejemplo: si hoy es 21, filtra del 8 al 21
-    # ----------------------------
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
 
@@ -2683,13 +2769,9 @@ def admin_report_top_products():
     if not end:
         end = hoy.strftime("%Y-%m-%d")
 
-    # ----------------------------
-    # WHERE dinámico
-    # ----------------------------
     where = []
     params = []
 
-    # Siempre se aplica el rango de fechas
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -2700,9 +2782,6 @@ def admin_report_top_products():
 
     db = get_db()
 
-    # ----------------------------
-    # Consulta top productos
-    # ----------------------------
     top = db.execute(
         f"""
         SELECT
@@ -2728,6 +2807,7 @@ def admin_report_top_products():
         top=top
     )
 
+
 # =====================================================
 # CATÁLOGO
 # =====================================================
@@ -2739,7 +2819,8 @@ def catalogo():
     if q:
         productos = db.execute(
             """
-            SELECT * FROM products
+            SELECT *
+            FROM products
             WHERE activo = 1
               AND stock > 0
               AND nombre LIKE ?
@@ -2750,7 +2831,8 @@ def catalogo():
     else:
         productos = db.execute(
             """
-            SELECT * FROM products
+            SELECT *
+            FROM products
             WHERE activo = 1 AND stock > 0
             ORDER BY nombre ASC
             """
@@ -2760,17 +2842,15 @@ def catalogo():
 
 
 # =====================================================
-# HELPER CARRITO
+# CARRITO
 # =====================================================
 def get_cart():
     if "cart" not in session:
         session["cart"] = {}
+
     return session["cart"]
 
 
-# =====================================================
-# CARRITO
-# =====================================================
 @app.route("/carrito")
 def ver_carrito():
     cart = get_cart()
@@ -2832,6 +2912,7 @@ def carrito_add(product_id):
 
     cart[pid] = cantidad_actual + 1
     session["cart"] = cart
+
     flash("Producto agregado al carrito.", "success")
     return redirect(url_for("catalogo"))
 
@@ -2839,6 +2920,7 @@ def carrito_add(product_id):
 @app.route("/carrito/inc/<int:product_id>", methods=["POST"])
 def carrito_inc(product_id):
     db = get_db()
+
     p = db.execute(
         "SELECT * FROM products WHERE id = ? AND activo = 1",
         (product_id,)
@@ -2858,6 +2940,7 @@ def carrito_inc(product_id):
 
     cart[pid] = cantidad_actual + 1
     session["cart"] = cart
+
     return redirect(url_for("ver_carrito"))
 
 
@@ -2873,6 +2956,7 @@ def carrito_dec(product_id):
         cart[pid] = cantidad_actual - 1
 
     session["cart"] = cart
+
     return redirect(url_for("ver_carrito"))
 
 
@@ -2880,7 +2964,9 @@ def carrito_dec(product_id):
 def carrito_remove(product_id):
     cart = get_cart()
     cart.pop(str(product_id), None)
+
     session["cart"] = cart
+
     return redirect(url_for("ver_carrito"))
 
 
@@ -2888,6 +2974,7 @@ def carrito_remove(product_id):
 def carrito_clear():
     session["cart"] = {}
     flash("Carrito vaciado.", "info")
+
     return redirect(url_for("ver_carrito"))
 
 
@@ -2897,6 +2984,7 @@ def carrito_clear():
 @app.route("/checkout", methods=["GET", "POST"])
 def checkout():
     cart = get_cart()
+
     if not cart:
         flash("Tu carrito está vacío.", "info")
         return redirect(url_for("catalogo"))
@@ -2955,6 +3043,7 @@ def checkout():
         )
 
     tipo_pago = norm_text(request.form.get("tipo_pago"))
+
     if tipo_pago not in ("contado", "credito"):
         flash("Tipo de pago inválido.", "danger")
         return redirect(url_for("checkout"))
@@ -2965,6 +3054,7 @@ def checkout():
         if tipo_pago != "contado":
             flash("Solo usuarios registrados pueden comprar a crédito.", "danger")
             return redirect(url_for("checkout"))
+
         if not nombre_no_asociado:
             flash("Debes escribir tu nombre para finalizar la compra.", "danger")
             return redirect(url_for("checkout"))
@@ -2992,6 +3082,7 @@ def checkout():
             estado
         )
     )
+
     order_id = cur.lastrowid
 
     for it in items:
@@ -3019,6 +3110,7 @@ def checkout():
     db.commit()
 
     session["cart"] = {}
+
     flash(f"✅ Compra realizada. Orden #{order_id} creada.", "success")
     return redirect(url_for("order_success", order_id=order_id))
 
@@ -3062,13 +3154,16 @@ def order_success(order_id):
         (order_id,)
     ).fetchall()
 
-    return render_template("order_success.html", orden=orden, items=items, comprador=comprador)
+    return render_template(
+        "order_success.html",
+        orden=orden,
+        items=items,
+        comprador=comprador
+    )
 
 
 # =====================================================
 # EJECUCIÓN LOCAL
-# En producción NO se debe usar app.run().
-# En producción se usa Gunicorn, Waitress u otro servidor WSGI.
 # =====================================================
 if __name__ == "__main__":
     os.makedirs(app.instance_path, exist_ok=True)
