@@ -2,22 +2,18 @@
 {% block title %}Compradores - Admin{% endblock %}
 
 {% block content %}
-<!-- =====================================================
-     ADMIN / COMPRADORES (RESPONSIVE)
-     - Desktop (md+): tabla compacta
-     - Mobile (<md): cards apiladas (sin scroll horizontal)
-     ===================================================== -->
-
 <div class="card shadow-sm card-compact">
   <div class="card-body">
 
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
       <div>
-        <h4 class="mb-1">Compradores</h4>
-        <small class="text-muted">Resumen por comprador (contado + crédito)</small>
+        <h4 class="mb-0">Compradores</h4>
+        <small class="text-muted">
+          Resumen acumulado por comprador
+        </small>
       </div>
 
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">
@@ -26,20 +22,74 @@
     </div>
 
     <!-- =====================================================
-         VISTA MÓVIL: CARDS (visible solo en < md)
+         RESUMEN GENERAL
+         ===================================================== -->
+    {% set total_compradores = buyers|length %}
+    {% set total_ordenes = buyers|sum(attribute='num_ordenes') %}
+    {% set total_monto = buyers|sum(attribute='total_monto') %}
+
+    <div class="row g-2 mb-3">
+
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-2 bg-white">
+          <small class="text-muted">Compradores</small>
+          <div class="fw-bold">{{ total_compradores }}</div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-2 bg-white">
+          <small class="text-muted">Órdenes acumuladas</small>
+          <div class="fw-bold">{{ total_ordenes }}</div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-2 bg-white">
+          <small class="text-muted">Total acumulado</small>
+          <div class="fw-bold">₡{{ "%.2f"|format(total_monto) }}</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- =====================================================
+         BUSCADOR EN VIVO
+         ===================================================== -->
+    <div class="mb-3">
+      <label class="form-label mb-1">Buscar comprador</label>
+      <input
+        id="buyerSearch"
+        type="text"
+        class="form-control form-control-sm"
+        placeholder="Ej: nombre del comprador o tipo"
+        autocomplete="off"
+      >
+      <small class="text-muted">
+        Podés buscar por nombre, registrado o no asociado.
+      </small>
+    </div>
+
+    <!-- =====================================================
+         VISTA MÓVIL: CARDS
          ===================================================== -->
     <div class="d-md-none">
       {% for b in buyers %}
-        <div class="border rounded-3 p-3 mb-2 bg-white">
+        <div
+          class="border rounded-3 p-3 mb-2 bg-white buyer-item"
+          data-search="{{ b.comprador|lower }} {{ b.tipo|lower }}">
 
-          <div class="d-flex justify-content-between align-items-start">
+          <div class="d-flex justify-content-between align-items-start gap-2">
             <div>
-              <div class="fw-semibold">{{ b.comprador }}</div>
+              <div class="fw-semibold">
+                {{ b.comprador }}
+              </div>
+
               <div class="mt-1">
                 {% if b.tipo == "registrado" %}
                   <span class="badge bg-primary">Registrado</span>
                 {% else %}
-                  <span class="badge bg-secondary">No Asociado</span>
+                  <span class="badge bg-secondary">No asociado</span>
                 {% endif %}
               </div>
             </div>
@@ -50,28 +100,30 @@
             </div>
           </div>
 
-          <div class="d-flex justify-content-between align-items-center mt-2">
+          <div class="d-flex justify-content-between align-items-center mt-3 gap-2">
             <div>
               <div class="small text-muted">Total acumulado</div>
-              <div class="fw-bold">₡{{ "%.2f"|format(b.total_monto) }}</div>
+              <div class="fw-bold">
+                ₡{{ "%.2f"|format(b.total_monto) }}
+              </div>
             </div>
 
-            <!-- Botón grande para dedo -->
             <a class="btn btn-primary btn-sm"
                href="{{ url_for('admin_buyer_history', key=b.buyer_key) }}">
               Ver historial
             </a>
           </div>
+
         </div>
       {% else %}
         <div class="text-center text-muted py-4">
-          No hay compradores aún.
+          No hay compradores registrados.
         </div>
       {% endfor %}
     </div>
 
     <!-- =====================================================
-         VISTA DESKTOP: TABLA (visible desde md en adelante)
+         VISTA DESKTOP: TABLA
          ===================================================== -->
     <div class="d-none d-md-block">
       <div class="table-responsive">
@@ -79,36 +131,54 @@
           <thead class="table-dark">
             <tr>
               <th>Comprador</th>
-              <th style="width: 120px;">Tipo</th>
-              <th style="width: 110px;">Órdenes</th>
-              <th style="width: 160px;">Total</th>
-              <th style="width: 140px;">Acción</th>
+              <th style="width: 140px;">Tipo</th>
+              <th style="width: 120px;">Órdenes</th>
+              <th style="width: 170px;">Total</th>
+              <th style="width: 150px;">Acción</th>
             </tr>
           </thead>
 
           <tbody>
             {% for b in buyers %}
-            <tr>
-              <td class="fw-semibold">{{ b.comprador }}</td>
+            <tr
+              class="buyer-item"
+              data-search="{{ b.comprador|lower }} {{ b.tipo|lower }}">
+
+              <td>
+                <div class="fw-semibold">
+                  {{ b.comprador }}
+                </div>
+              </td>
+
               <td>
                 {% if b.tipo == "registrado" %}
                   <span class="badge bg-primary">Registrado</span>
                 {% else %}
-                  <span class="badge bg-secondary">No Asociado</span>
+                  <span class="badge bg-secondary">No asociado</span>
                 {% endif %}
               </td>
-              <td>{{ b.num_ordenes }}</td>
-              <td class="fw-bold">₡{{ "%.2f"|format(b.total_monto) }}</td>
+
+              <td>
+                {{ b.num_ordenes }}
+              </td>
+
+              <td class="fw-bold">
+                ₡{{ "%.2f"|format(b.total_monto) }}
+              </td>
+
               <td>
                 <a class="btn btn-sm btn-outline-primary"
                    href="{{ url_for('admin_buyer_history', key=b.buyer_key) }}">
                   Ver historial
                 </a>
               </td>
+
             </tr>
             {% else %}
             <tr>
-              <td colspan="5" class="text-center text-muted py-4">No hay compradores aún.</td>
+              <td colspan="5" class="text-center text-muted py-4">
+                No hay compradores registrados.
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -116,7 +186,57 @@
       </div>
     </div>
 
+    <!-- =====================================================
+         SIN RESULTADOS DEL BUSCADOR
+         ===================================================== -->
+    <div id="buyerNoResults" class="alert alert-light border text-center mt-3 d-none">
+      No se encontraron compradores con ese criterio.
+    </div>
+
+    <!-- =====================================================
+         NOTA INFORMATIVA
+         ===================================================== -->
+    <div class="alert alert-light border mt-3 mb-0">
+      <small class="text-muted">
+        Este resumen agrupa las compras por persona. Desde el historial podés revisar las órdenes de cada comprador dentro del rango de fechas seleccionado.
+      </small>
+    </div>
+
   </div>
 </div>
-{% endblock %}
 
+<!-- =====================================================
+     JS: BUSCADOR EN VIVO
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("buyerSearch");
+    const items = Array.from(document.querySelectorAll(".buyer-item"));
+    const noResults = document.getElementById("buyerNoResults");
+
+    if (!input) return;
+
+    input.addEventListener("input", function () {
+      const q = input.value.trim().toLowerCase();
+      let visibleCount = 0;
+
+      items.forEach(function (item) {
+        const text = item.dataset.search || "";
+        const match = text.includes(q);
+
+        item.style.display = match ? "" : "none";
+
+        if (match) {
+          visibleCount += 1;
+        }
+      });
+
+      if (q && visibleCount === 0) {
+        noResults.classList.remove("d-none");
+      } else {
+        noResults.classList.add("d-none");
+      }
+    });
+  });
+</script>
+{% endblock %}

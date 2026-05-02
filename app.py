@@ -1212,9 +1212,12 @@ def admin_user_delete(user_id):
     flash(f"Usuario '{user['nombre']}' eliminado correctamente.", "success")
     return redirect(url_for("admin_users"))
 
-
 # =====================================================
 # MIS COMPRAS
+# - Historial del usuario logueado
+# - Filtra por tipo de pago y fechas
+# - Si no se envían fechas, muestra automáticamente
+#   los últimos 14 días incluyendo el día actual
 # =====================================================
 @app.route("/mis-compras")
 def mis_compras():
@@ -1225,9 +1228,23 @@ def mis_compras():
     user_id = session["user_id"]
     db = get_db()
 
-    pago = (request.args.get("pago") or "").strip().lower().replace("é", "e")
+    pago = (request.args.get("pago") or "").strip().lower()
+    pago = pago.replace("é", "e")
+
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
+
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
+    hoy = datetime.now().date()
+    hace_14 = hoy - timedelta(days=13)
+
+    if not start:
+        start = hace_14.strftime("%Y-%m-%d")
+
+    if not end:
+        end = hoy.strftime("%Y-%m-%d")
 
     where = ["o.user_id = ?"]
     params = [user_id]
@@ -1236,19 +1253,22 @@ def mis_compras():
         where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
         params.append(pago)
 
-    if start:
-        where.append("date(o.fecha) >= date(?)")
-        params.append(start)
+    where.append("date(o.fecha) >= date(?)")
+    params.append(start)
 
-    if end:
-        where.append("date(o.fecha) <= date(?)")
-        params.append(end)
+    where.append("date(o.fecha) <= date(?)")
+    params.append(end)
 
     where_sql = "WHERE " + " AND ".join(where)
 
     orders = db.execute(
         f"""
-        SELECT o.id, o.fecha, o.tipo_pago, o.estado, o.total
+        SELECT
+            o.id,
+            o.fecha,
+            o.tipo_pago,
+            o.estado,
+            o.total
         FROM orders o
         {where_sql}
         ORDER BY o.id DESC
@@ -1267,7 +1287,11 @@ def mis_compras():
         total_rango=total_rango
     )
 
-
+# =====================================================
+# MIS COMPRAS: DETALLE DE COMPRA DEL USUARIO
+# - Solo permite ver órdenes del usuario logueado
+# - Evita que un usuario vea compras de otro usuario
+# =====================================================
 @app.route("/mis-compras/<int:order_id>")
 def mis_compras_detalle(order_id):
     if "user_id" not in session:
@@ -1279,15 +1303,21 @@ def mis_compras_detalle(order_id):
 
     orden = db.execute(
         """
-        SELECT id, fecha, tipo_pago, estado, total
+        SELECT
+            id,
+            fecha,
+            tipo_pago,
+            estado,
+            total
         FROM orders
-        WHERE id = ? AND user_id = ?
+        WHERE id = ?
+          AND user_id = ?
         """,
         (order_id, user_id)
     ).fetchone()
 
     if not orden:
-        flash("Orden no encontrada o sin permisos.", "danger")
+        flash("Orden no encontrada o sin permisos para verla.", "danger")
         return redirect(url_for("mis_compras"))
 
     items = db.execute(
@@ -1304,24 +1334,33 @@ def mis_compras_detalle(order_id):
         (order_id,)
     ).fetchall()
 
-    return render_template("mis_compras_detalle.html", orden=orden, items=items)
-
+    return render_template(
+        "mis_compras_detalle.html",
+        orden=orden,
+        items=items
+    )
 
 # =====================================================
 # ADMIN: HISTORIAL DE ÓRDENES
+# - Lista órdenes del sistema
+# - Filtra por estado, tipo de pago, comprador, código o número de orden
+# - Por defecto muestra últimos 14 días
 # =====================================================
 @app.route("/admin/orders")
 def admin_orders():
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
-    estado = request.args.get("estado", "").strip()
-    pago = request.args.get("pago", "").strip()
-    q = request.args.get("q", "").strip()
+    estado = (request.args.get("estado") or "").strip().lower()
+    pago = (request.args.get("pago") or "").strip().lower().replace("é", "e")
+    q = (request.args.get("q") or "").strip()
 
-    start = request.args.get("start", "").strip()
-    end = request.args.get("end", "").strip()
+    start = (request.args.get("start") or "").strip()
+    end = (request.args.get("end") or "").strip()
 
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
 
@@ -1334,18 +1373,34 @@ def admin_orders():
     where = []
     params = []
 
-    if estado:
-        where.append("o.estado = ?")
+    # Filtro por estado
+    if estado in ("pagada", "pendiente"):
+        where.append("lower(trim(o.estado)) = ?")
         params.append(estado)
 
-    if pago:
+    # Filtro por tipo de pago
+    if pago in ("contado", "credito"):
         where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
-        params.append(pago.replace("é", "e"))
+        params.append(pago)
 
+    # Filtro por comprador, código de colaborador o número de orden
     if q:
-        where.append("(u.nombre LIKE ? OR o.nombre_no_asociado LIKE ?)")
-        params.extend([f"%{q}%", f"%{q}%"])
+        where.append("""
+            (
+                u.nombre LIKE ?
+                OR u.usuario LIKE ?
+                OR o.nombre_no_asociado LIKE ?
+                OR CAST(o.id AS TEXT) LIKE ?
+            )
+        """)
+        params.extend([
+            f"%{q}%",
+            f"%{q}%",
+            f"%{q}%",
+            f"%{q}%"
+        ])
 
+    # Filtro por fechas
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -1360,7 +1415,8 @@ def admin_orders():
         f"""
         SELECT
             o.*,
-            u.nombre AS nombre_usuario
+            u.nombre AS nombre_usuario,
+            u.usuario AS codigo_usuario
         FROM orders o
         LEFT JOIN users u ON u.id = o.user_id
         {where_sql}
@@ -1379,9 +1435,14 @@ def admin_orders():
         end=end
     )
 
-
 # =====================================================
 # ADMIN: EXPORTAR HISTORIAL DE ÓRDENES
+# - Exporta el historial de compras usando los mismos filtros
+#   de la pantalla /admin/orders
+# - Busca por nombre, código de colaborador, no asociado u orden
+# - Genera 2 hojas:
+#   1) Órdenes
+#   2) Detalle productos
 # =====================================================
 @app.route("/admin/orders/export")
 def admin_orders_export():
@@ -1395,6 +1456,9 @@ def admin_orders_export():
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
 
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
 
@@ -1407,18 +1471,34 @@ def admin_orders_export():
     where = []
     params = []
 
+    # Filtro por estado
     if estado in ("pagada", "pendiente"):
         where.append("lower(trim(o.estado)) = ?")
         params.append(estado)
 
+    # Filtro por tipo de pago
     if pago in ("contado", "credito"):
         where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
         params.append(pago)
 
+    # Filtro por comprador, código de colaborador o número de orden
     if q:
-        where.append("(u.nombre LIKE ? OR o.nombre_no_asociado LIKE ?)")
-        params.extend([f"%{q}%", f"%{q}%"])
+        where.append("""
+            (
+                u.nombre LIKE ?
+                OR u.usuario LIKE ?
+                OR o.nombre_no_asociado LIKE ?
+                OR CAST(o.id AS TEXT) LIKE ?
+            )
+        """)
+        params.extend([
+            f"%{q}%",
+            f"%{q}%",
+            f"%{q}%",
+            f"%{q}%"
+        ])
 
+    # Filtro por fechas
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -1429,6 +1509,9 @@ def admin_orders_export():
 
     db = get_db()
 
+    # =====================================================
+    # RESUMEN
+    # =====================================================
     resumen = db.execute(
         f"""
         SELECT
@@ -1449,12 +1532,16 @@ def admin_orders_export():
         params
     ).fetchone()
 
+    # =====================================================
+    # ÓRDENES
+    # =====================================================
     orders = db.execute(
         f"""
         SELECT
             o.id,
             o.fecha,
             COALESCE(u.nombre, o.nombre_no_asociado, 'Sin nombre') AS comprador,
+            COALESCE(u.usuario, '') AS codigo_usuario,
             o.tipo_pago,
             o.estado,
             o.total
@@ -1466,12 +1553,16 @@ def admin_orders_export():
         params
     ).fetchall()
 
+    # =====================================================
+    # DETALLE DE PRODUCTOS
+    # =====================================================
     detalle = db.execute(
         f"""
         SELECT
             o.id AS order_id,
             o.fecha,
             COALESCE(u.nombre, o.nombre_no_asociado, 'Sin nombre') AS comprador,
+            COALESCE(u.usuario, '') AS codigo_usuario,
             o.tipo_pago,
             o.estado,
             o.total AS total_orden,
@@ -1489,13 +1580,18 @@ def admin_orders_export():
         params
     ).fetchall()
 
+    # =====================================================
+    # CREAR EXCEL
+    # =====================================================
     wb = Workbook()
 
     fill_header = PatternFill("solid", fgColor="1F2328")
     fill_title = PatternFill("solid", fgColor="EAF2F8")
+
     font_header = Font(color="FFFFFF", bold=True)
     font_title = Font(bold=True, size=14)
     font_bold = Font(bold=True)
+
     alignment_center = Alignment(horizontal="center", vertical="center")
     alignment_left = Alignment(horizontal="left", vertical="center")
 
@@ -1506,43 +1602,53 @@ def admin_orders_export():
         bottom=Side(style="thin", color="D9DEE3")
     )
 
-    # Hoja 1
+    # =====================================================
+    # HOJA 1: ÓRDENES
+    # =====================================================
     ws = wb.active
     ws.title = "Órdenes"
 
-    ws.merge_cells("A1:F1")
+    ws.merge_cells("A1:G1")
     ws["A1"] = "Historial de compras - ASERVE"
     ws["A1"].font = font_title
     ws["A1"].fill = fill_title
     ws["A1"].alignment = alignment_left
 
+    # Filtros aplicados
     ws["A3"] = "Desde"
     ws["B3"] = start
+
     ws["C3"] = "Hasta"
     ws["D3"] = end
+
     ws["E3"] = "Pago"
     ws["F3"] = pago if pago else "Todos"
 
     ws["A4"] = "Estado"
     ws["B4"] = estado if estado else "Todos"
+
     ws["C4"] = "Búsqueda"
     ws["D4"] = q if q else "Sin búsqueda"
 
-    for row in ws.iter_rows(min_row=3, max_row=4, min_col=1, max_col=6):
+    for row in ws.iter_rows(min_row=3, max_row=4, min_col=1, max_col=7):
         for cell in row:
             cell.border = thin_border
             cell.alignment = alignment_center
 
+    # Resumen
     ws["A6"] = "Resumen"
     ws["A6"].font = font_bold
     ws["A6"].fill = fill_title
 
     ws["A7"] = "Órdenes"
     ws["B7"] = resumen["num_ordenes"]
+
     ws["A8"] = "Total general"
     ws["B8"] = float(resumen["total_general"])
+
     ws["A9"] = "Contado"
     ws["B9"] = float(resumen["total_contado"])
+
     ws["A10"] = "Crédito"
     ws["B10"] = float(resumen["total_credito"])
 
@@ -1558,8 +1664,18 @@ def admin_orders_export():
     ws["B9"].number_format = '"₡"#,##0.00'
     ws["B10"].number_format = '"₡"#,##0.00'
 
+    # Tabla de órdenes
     start_row = 12
-    headers = ["Orden", "Fecha", "Comprador", "Pago", "Estado", "Total"]
+
+    headers = [
+        "Orden",
+        "Fecha",
+        "Comprador",
+        "Código",
+        "Pago",
+        "Estado",
+        "Total"
+    ]
 
     for col_num, header in enumerate(headers, start=1):
         cell = ws.cell(row=start_row, column=col_num)
@@ -1575,45 +1691,69 @@ def admin_orders_export():
         ws.cell(row=current_row, column=1).value = f"#{o['id']}"
         ws.cell(row=current_row, column=2).value = o["fecha"]
         ws.cell(row=current_row, column=3).value = o["comprador"]
-        ws.cell(row=current_row, column=4).value = o["tipo_pago"]
-        ws.cell(row=current_row, column=5).value = o["estado"]
-        ws.cell(row=current_row, column=6).value = float(o["total"])
+        ws.cell(row=current_row, column=4).value = o["codigo_usuario"]
+        ws.cell(row=current_row, column=5).value = o["tipo_pago"]
+        ws.cell(row=current_row, column=6).value = o["estado"]
+        ws.cell(row=current_row, column=7).value = float(o["total"])
 
-        for col in range(1, 7):
+        for col in range(1, 8):
             cell = ws.cell(row=current_row, column=col)
             cell.border = thin_border
             cell.alignment = alignment_left
 
-        ws.cell(row=current_row, column=6).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=7).number_format = '"₡"#,##0.00'
+
         current_row += 1
 
     if not orders:
-        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=6)
+        ws.merge_cells(
+            start_row=current_row,
+            start_column=1,
+            end_row=current_row,
+            end_column=7
+        )
         ws.cell(row=current_row, column=1).value = "Sin datos para los filtros seleccionados."
         ws.cell(row=current_row, column=1).alignment = alignment_center
 
-    ws.column_dimensions["A"].width = 12
-    ws.column_dimensions["B"].width = 22
-    ws.column_dimensions["C"].width = 35
-    ws.column_dimensions["D"].width = 15
-    ws.column_dimensions["E"].width = 15
-    ws.column_dimensions["F"].width = 16
+    widths_ordenes = {
+        "A": 12,
+        "B": 22,
+        "C": 35,
+        "D": 16,
+        "E": 15,
+        "F": 15,
+        "G": 16,
+    }
+
+    for col_letter, width in widths_ordenes.items():
+        ws.column_dimensions[col_letter].width = width
 
     ws.freeze_panes = "A13"
-    ws.auto_filter.ref = f"A{start_row}:F{max(start_row, current_row - 1)}"
+    ws.auto_filter.ref = f"A{start_row}:G{max(start_row, current_row - 1)}"
 
-    # Hoja 2
+    # =====================================================
+    # HOJA 2: DETALLE PRODUCTOS
+    # =====================================================
     ws2 = wb.create_sheet("Detalle productos")
 
-    ws2.merge_cells("A1:J1")
+    ws2.merge_cells("A1:K1")
     ws2["A1"] = "Detalle de productos por orden - ASERVE"
     ws2["A1"].font = font_title
     ws2["A1"].fill = fill_title
     ws2["A1"].alignment = alignment_left
 
     headers_detalle = [
-        "Orden", "Fecha", "Comprador", "Pago", "Estado",
-        "Total orden", "Producto", "Cantidad", "Precio unitario", "Subtotal"
+        "Orden",
+        "Fecha",
+        "Comprador",
+        "Código",
+        "Pago",
+        "Estado",
+        "Total orden",
+        "Producto",
+        "Cantidad",
+        "Precio unitario",
+        "Subtotal"
     ]
 
     start_row_detalle = 3
@@ -1632,41 +1772,59 @@ def admin_orders_export():
         ws2.cell(row=current_row, column=1).value = f"#{d['order_id']}"
         ws2.cell(row=current_row, column=2).value = d["fecha"]
         ws2.cell(row=current_row, column=3).value = d["comprador"]
-        ws2.cell(row=current_row, column=4).value = d["tipo_pago"]
-        ws2.cell(row=current_row, column=5).value = d["estado"]
-        ws2.cell(row=current_row, column=6).value = float(d["total_orden"])
-        ws2.cell(row=current_row, column=7).value = d["producto"]
-        ws2.cell(row=current_row, column=8).value = int(d["cantidad"])
-        ws2.cell(row=current_row, column=9).value = float(d["precio_unitario"])
-        ws2.cell(row=current_row, column=10).value = float(d["subtotal"])
+        ws2.cell(row=current_row, column=4).value = d["codigo_usuario"]
+        ws2.cell(row=current_row, column=5).value = d["tipo_pago"]
+        ws2.cell(row=current_row, column=6).value = d["estado"]
+        ws2.cell(row=current_row, column=7).value = float(d["total_orden"])
+        ws2.cell(row=current_row, column=8).value = d["producto"]
+        ws2.cell(row=current_row, column=9).value = int(d["cantidad"])
+        ws2.cell(row=current_row, column=10).value = float(d["precio_unitario"])
+        ws2.cell(row=current_row, column=11).value = float(d["subtotal"])
 
-        for col in range(1, 11):
+        for col in range(1, 12):
             cell = ws2.cell(row=current_row, column=col)
             cell.border = thin_border
             cell.alignment = alignment_left
 
-        ws2.cell(row=current_row, column=6).number_format = '"₡"#,##0.00'
-        ws2.cell(row=current_row, column=9).number_format = '"₡"#,##0.00'
+        ws2.cell(row=current_row, column=7).number_format = '"₡"#,##0.00'
         ws2.cell(row=current_row, column=10).number_format = '"₡"#,##0.00'
+        ws2.cell(row=current_row, column=11).number_format = '"₡"#,##0.00'
 
         current_row += 1
 
     if not detalle:
-        ws2.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=10)
+        ws2.merge_cells(
+            start_row=current_row,
+            start_column=1,
+            end_row=current_row,
+            end_column=11
+        )
         ws2.cell(row=current_row, column=1).value = "Sin detalle de productos para los filtros seleccionados."
         ws2.cell(row=current_row, column=1).alignment = alignment_center
 
-    widths = {
-        "A": 12, "B": 22, "C": 35, "D": 15, "E": 15,
-        "F": 16, "G": 35, "H": 12, "I": 18, "J": 16
+    widths_detalle = {
+        "A": 12,
+        "B": 22,
+        "C": 35,
+        "D": 16,
+        "E": 15,
+        "F": 15,
+        "G": 16,
+        "H": 35,
+        "I": 12,
+        "J": 18,
+        "K": 16,
     }
 
-    for col_letter, width in widths.items():
+    for col_letter, width in widths_detalle.items():
         ws2.column_dimensions[col_letter].width = width
 
     ws2.freeze_panes = "A4"
-    ws2.auto_filter.ref = f"A{start_row_detalle}:J{max(start_row_detalle, current_row - 1)}"
+    ws2.auto_filter.ref = f"A{start_row_detalle}:K{max(start_row_detalle, current_row - 1)}"
 
+    # =====================================================
+    # DESCARGA
+    # =====================================================
     output = BytesIO()
     wb.save(output)
     output.seek(0)
@@ -1680,9 +1838,13 @@ def admin_orders_export():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-
 # =====================================================
 # ADMIN: DETALLE DE ORDEN
+# - Muestra el detalle completo de una orden
+# - Permite regresar correctamente según la pantalla de origen:
+#   1) Historial general
+#   2) Créditos por colaborador
+#   3) Historial por comprador
 # =====================================================
 @app.route("/admin/orders/<int:order_id>")
 def admin_order_detail(order_id):
@@ -1691,11 +1853,16 @@ def admin_order_detail(order_id):
 
     db = get_db()
 
+    # =====================================================
+    # CONSULTA DE LA ORDEN
+    # También trae nombre y código del usuario si es registrado
+    # =====================================================
     orden = db.execute(
         """
         SELECT
             o.*,
-            u.nombre AS nombre_usuario
+            u.nombre AS nombre_usuario,
+            u.usuario AS codigo_usuario
         FROM orders o
         LEFT JOIN users u ON u.id = o.user_id
         WHERE o.id = ?
@@ -1707,6 +1874,9 @@ def admin_order_detail(order_id):
         flash("Orden no encontrada.", "danger")
         return redirect(url_for("admin_orders"))
 
+    # =====================================================
+    # DETALLE DE PRODUCTOS DE LA ORDEN
+    # =====================================================
     items = db.execute(
         """
         SELECT
@@ -1721,18 +1891,37 @@ def admin_order_detail(order_id):
         (order_id,)
     ).fetchall()
 
-    from_page = request.args.get("from_page", "orders")
-    back_user_id = request.args.get("user_id", "").strip()
+    # =====================================================
+    # DATOS PARA REGRESAR A LA PANTALLA CORRECTA
+    # from_page puede ser:
+    # - orders
+    # - credits
+    # - buyer
+    # =====================================================
+    from_page = (request.args.get("from_page") or "orders").strip()
+
+    if from_page not in ("orders", "credits", "buyer"):
+        from_page = "orders"
+
+    # Para volver desde créditos
+    back_user_id = (request.args.get("user_id") or "").strip()
+
+    # Para volver desde historial por comprador
+    buyer_key = (request.args.get("buyer_key") or "").strip()
+    back_start = (request.args.get("start") or "").strip()
+    back_end = (request.args.get("end") or "").strip()
 
     return render_template(
         "admin_order_detail.html",
         orden=orden,
         items=items,
         from_page=from_page,
-        back_user_id=back_user_id
+        back_user_id=back_user_id,
+        buyer_key=buyer_key,
+        back_start=back_start,
+        back_end=back_end
     )
-
-
+    
 # =====================================================
 # ADMIN: COMPRADORES
 # =====================================================
@@ -1779,19 +1968,28 @@ def admin_buyers():
     return render_template("admin_buyers.html", buyers=buyers)
 
 
+# =====================================================
+# ADMIN: HISTORIAL POR COMPRADOR
+# - Muestra las órdenes de un comprador específico
+# - Filtra automáticamente últimos 14 días
+# - Permite filtrar por fechas
+# =====================================================
 @app.route("/admin/buyer")
 def admin_buyer_history():
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
-    key = request.args.get("key", "").strip()
-    start = request.args.get("start", "").strip()
-    end = request.args.get("end", "").strip()
+    key = (request.args.get("key") or "").strip()
+    start = (request.args.get("start") or "").strip()
+    end = (request.args.get("end") or "").strip()
 
     if not key:
         flash("Comprador inválido.", "danger")
         return redirect(url_for("admin_buyers"))
 
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
 
@@ -1808,7 +2006,12 @@ def admin_buyer_history():
 
     comprador_nombre = ""
     comprador_tipo = ""
+    comprador_codigo = ""
 
+    # =====================================================
+    # COMPRADOR REGISTRADO
+    # key ejemplo: u:3
+    # =====================================================
     if key.startswith("u:"):
         comprador_tipo = "registrado"
         user_id = key.split(":", 1)[1]
@@ -1817,12 +2020,25 @@ def admin_buyer_history():
         params.append(user_id)
 
         u = db.execute(
-            "SELECT nombre FROM users WHERE id = ?",
+            """
+            SELECT nombre, usuario
+            FROM users
+            WHERE id = ?
+            """,
             (user_id,)
         ).fetchone()
 
-        comprador_nombre = u["nombre"] if u else "Usuario"
+        if u:
+            comprador_nombre = u["nombre"]
+            comprador_codigo = u["usuario"]
+        else:
+            comprador_nombre = "Usuario"
+            comprador_codigo = ""
 
+    # =====================================================
+    # COMPRADOR NO ASOCIADO
+    # key ejemplo: na:Juan Pérez
+    # =====================================================
     elif key.startswith("na:"):
         comprador_tipo = "no_asociado"
         nombre = key.split(":", 1)[1]
@@ -1832,11 +2048,15 @@ def admin_buyer_history():
         params.append(nombre)
 
         comprador_nombre = nombre
+        comprador_codigo = ""
 
     else:
         flash("Comprador inválido.", "danger")
         return redirect(url_for("admin_buyers"))
 
+    # =====================================================
+    # FILTRO POR FECHAS
+    # =====================================================
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -1845,6 +2065,9 @@ def admin_buyer_history():
 
     where_sql = "WHERE " + " AND ".join(where)
 
+    # =====================================================
+    # CONSULTA DE ÓRDENES DEL COMPRADOR
+    # =====================================================
     orders = db.execute(
         f"""
         SELECT
@@ -1867,13 +2090,20 @@ def admin_buyer_history():
         key=key,
         comprador_nombre=comprador_nombre,
         comprador_tipo=comprador_tipo,
+        comprador_codigo=comprador_codigo,
         orders=orders,
         total_rango=total_rango,
         start=start,
         end=end
     )
 
-
+# =====================================================
+# ADMIN: EXPORTAR HISTORIAL POR COMPRADOR A EXCEL
+# - Exporta todas las órdenes de un comprador
+# - Filtra por fechas
+# - Incluye detalle de productos por orden
+# - Si es comprador registrado, incluye código/usuario
+# =====================================================
 @app.route("/admin/buyer/export")
 def admin_buyer_history_export():
     if "user_id" not in session or session.get("rol") != "admin":
@@ -1887,6 +2117,9 @@ def admin_buyer_history_export():
         flash("Comprador inválido para exportar.", "danger")
         return redirect(url_for("admin_buyers"))
 
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
 
@@ -1903,7 +2136,11 @@ def admin_buyer_history_export():
 
     comprador_nombre = ""
     comprador_tipo = ""
+    comprador_codigo = ""
 
+    # =====================================================
+    # COMPRADOR REGISTRADO
+    # =====================================================
     if key.startswith("u:"):
         comprador_tipo = "registrado"
         user_id = key.split(":", 1)[1]
@@ -1912,12 +2149,24 @@ def admin_buyer_history_export():
         params.append(user_id)
 
         u = db.execute(
-            "SELECT nombre FROM users WHERE id = ?",
+            """
+            SELECT nombre, usuario
+            FROM users
+            WHERE id = ?
+            """,
             (user_id,)
         ).fetchone()
 
-        comprador_nombre = u["nombre"] if u else "Usuario"
+        if u:
+            comprador_nombre = u["nombre"]
+            comprador_codigo = u["usuario"]
+        else:
+            comprador_nombre = "Usuario"
+            comprador_codigo = ""
 
+    # =====================================================
+    # COMPRADOR NO ASOCIADO
+    # =====================================================
     elif key.startswith("na:"):
         comprador_tipo = "no asociado"
         nombre = key.split(":", 1)[1]
@@ -1927,11 +2176,15 @@ def admin_buyer_history_export():
         params.append(nombre)
 
         comprador_nombre = nombre
+        comprador_codigo = ""
 
     else:
         flash("Comprador inválido para exportar.", "danger")
         return redirect(url_for("admin_buyers"))
 
+    # =====================================================
+    # FILTRO DE FECHAS
+    # =====================================================
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -1940,6 +2193,9 @@ def admin_buyer_history_export():
 
     where_sql = "WHERE " + " AND ".join(where)
 
+    # =====================================================
+    # RESUMEN
+    # =====================================================
     resumen = db.execute(
         f"""
         SELECT
@@ -1951,6 +2207,9 @@ def admin_buyer_history_export():
         params
     ).fetchone()
 
+    # =====================================================
+    # DETALLE DE PRODUCTOS
+    # =====================================================
     rows = db.execute(
         f"""
         SELECT
@@ -1972,15 +2231,21 @@ def admin_buyer_history_export():
         params
     ).fetchall()
 
+    # =====================================================
+    # CREAR EXCEL
+    # =====================================================
     wb = Workbook()
     ws = wb.active
     ws.title = "Historial comprador"
 
+    # Estilos
     fill_header = PatternFill("solid", fgColor="1F2328")
     fill_title = PatternFill("solid", fgColor="EAF2F8")
+
     font_header = Font(color="FFFFFF", bold=True)
     font_title = Font(bold=True, size=14)
     font_bold = Font(bold=True)
+
     alignment_center = Alignment(horizontal="center", vertical="center")
     alignment_left = Alignment(horizontal="left", vertical="center")
 
@@ -1991,7 +2256,10 @@ def admin_buyer_history_export():
         bottom=Side(style="thin", color="D9DEE3")
     )
 
-    ws.merge_cells("A1:I1")
+    # =====================================================
+    # ENCABEZADO DEL REPORTE
+    # =====================================================
+    ws.merge_cells("A1:J1")
     ws["A1"] = "Historial de compras por comprador - ASERVE"
     ws["A1"].font = font_title
     ws["A1"].fill = fill_title
@@ -1999,37 +2267,55 @@ def admin_buyer_history_export():
 
     ws["A3"] = "Comprador"
     ws["B3"] = comprador_nombre
+
     ws["A4"] = "Tipo"
     ws["B4"] = comprador_tipo
-    ws["A5"] = "Desde"
-    ws["B5"] = start
-    ws["A6"] = "Hasta"
-    ws["B6"] = end
 
-    ws["A8"] = "Resumen"
-    ws["A8"].font = font_bold
-    ws["A8"].fill = fill_title
+    ws["A5"] = "Código"
+    ws["B5"] = comprador_codigo if comprador_codigo else "No aplica"
 
-    ws["A9"] = "Órdenes"
-    ws["B9"] = resumen["num_ordenes"]
+    ws["A6"] = "Desde"
+    ws["B6"] = start
 
-    ws["A10"] = "Total acumulado"
-    ws["B10"] = float(resumen["total_acumulado"])
-    ws["B10"].number_format = '"₡"#,##0.00'
+    ws["A7"] = "Hasta"
+    ws["B7"] = end
 
-    for row in ws.iter_rows(min_row=3, max_row=10, min_col=1, max_col=2):
+    ws["A9"] = "Resumen"
+    ws["A9"].font = font_bold
+    ws["A9"].fill = fill_title
+
+    ws["A10"] = "Órdenes"
+    ws["B10"] = resumen["num_ordenes"]
+
+    ws["A11"] = "Total acumulado"
+    ws["B11"] = float(resumen["total_acumulado"])
+    ws["B11"].number_format = '"₡"#,##0.00'
+
+    for row in ws.iter_rows(min_row=3, max_row=11, min_col=1, max_col=2):
         for cell in row:
             cell.border = thin_border
             cell.alignment = alignment_left
 
-    for row in range(3, 11):
+    for row in range(3, 12):
         ws.cell(row=row, column=1).font = font_bold
 
-    start_row = 12
+    # =====================================================
+    # TABLA DE DETALLE
+    # =====================================================
+    start_row = 13
 
     headers = [
-        "Orden", "Fecha", "Tipo de pago", "Estado", "Total orden",
-        "Producto", "Cantidad", "Precio unitario", "Subtotal"
+        "Orden",
+        "Fecha",
+        "Comprador",
+        "Código",
+        "Tipo de pago",
+        "Estado",
+        "Total orden",
+        "Producto",
+        "Cantidad",
+        "Precio unitario",
+        "Subtotal"
     ]
 
     for col_num, header in enumerate(headers, start=1):
@@ -2045,22 +2331,24 @@ def admin_buyer_history_export():
     for r in rows:
         ws.cell(row=current_row, column=1).value = f"#{r['order_id']}"
         ws.cell(row=current_row, column=2).value = r["fecha"]
-        ws.cell(row=current_row, column=3).value = r["tipo_pago"]
-        ws.cell(row=current_row, column=4).value = r["estado"]
-        ws.cell(row=current_row, column=5).value = float(r["total_orden"])
-        ws.cell(row=current_row, column=6).value = r["producto"]
-        ws.cell(row=current_row, column=7).value = int(r["cantidad"])
-        ws.cell(row=current_row, column=8).value = float(r["precio_unitario"])
-        ws.cell(row=current_row, column=9).value = float(r["subtotal"])
+        ws.cell(row=current_row, column=3).value = comprador_nombre
+        ws.cell(row=current_row, column=4).value = comprador_codigo
+        ws.cell(row=current_row, column=5).value = r["tipo_pago"]
+        ws.cell(row=current_row, column=6).value = r["estado"]
+        ws.cell(row=current_row, column=7).value = float(r["total_orden"])
+        ws.cell(row=current_row, column=8).value = r["producto"]
+        ws.cell(row=current_row, column=9).value = int(r["cantidad"])
+        ws.cell(row=current_row, column=10).value = float(r["precio_unitario"])
+        ws.cell(row=current_row, column=11).value = float(r["subtotal"])
 
-        for col in range(1, 10):
+        for col in range(1, 12):
             cell = ws.cell(row=current_row, column=col)
             cell.border = thin_border
             cell.alignment = alignment_left
 
-        ws.cell(row=current_row, column=5).number_format = '"₡"#,##0.00'
-        ws.cell(row=current_row, column=8).number_format = '"₡"#,##0.00'
-        ws.cell(row=current_row, column=9).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=7).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=10).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=11).number_format = '"₡"#,##0.00'
 
         current_row += 1
 
@@ -2069,29 +2357,44 @@ def admin_buyer_history_export():
             start_row=current_row,
             start_column=1,
             end_row=current_row,
-            end_column=9
+            end_column=11
         )
-        ws.cell(row=current_row, column=1).value = "Sin datos para este comprador."
+        ws.cell(row=current_row, column=1).value = "Sin datos para este comprador en el rango seleccionado."
         ws.cell(row=current_row, column=1).alignment = alignment_center
         ws.cell(row=current_row, column=1).border = thin_border
 
+    # =====================================================
+    # AJUSTES VISUALES
+    # =====================================================
     widths = {
-        "A": 12, "B": 22, "C": 16, "D": 14, "E": 16,
-        "F": 35, "G": 12, "H": 18, "I": 16
+        "A": 12,
+        "B": 22,
+        "C": 35,
+        "D": 16,
+        "E": 16,
+        "F": 14,
+        "G": 16,
+        "H": 35,
+        "I": 12,
+        "J": 18,
+        "K": 16,
     }
 
     for col_letter, width in widths.items():
         ws.column_dimensions[col_letter].width = width
 
-    ws.freeze_panes = "A13"
-    ws.auto_filter.ref = f"A{start_row}:I{max(start_row, current_row - 1)}"
+    ws.freeze_panes = "A14"
+    ws.auto_filter.ref = f"A{start_row}:K{max(start_row, current_row - 1)}"
 
+    # =====================================================
+    # DESCARGAR ARCHIVO
+    # =====================================================
     output = BytesIO()
     wb.save(output)
     output.seek(0)
 
     safe_name = secure_filename(comprador_nombre) or "comprador"
-    filename = f"historial_comprador_{safe_name}.xlsx"
+    filename = f"historial_comprador_{safe_name}_{start}_a_{end}.xlsx"
 
     return send_file(
         output,
@@ -2099,7 +2402,6 @@ def admin_buyer_history_export():
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 
 # =====================================================
 # ADMIN: CRÉDITOS

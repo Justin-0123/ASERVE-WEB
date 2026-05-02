@@ -92,6 +92,11 @@
             Perfil
           </a>
 
+          <!-- Mis compras (solo si hay sesión) -->
+          <a href="{{ url_for('mis_compras') }}" class="btn btn-outline-light btn-sm">
+            Mis compras
+          </a>
+          
           <!-- Panel Admin (solo si rol admin) -->
           {% if session.get("rol") == "admin" %}
             <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-warning btn-sm">

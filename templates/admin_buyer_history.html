@@ -2,44 +2,39 @@
 {% block title %}Historial comprador - Admin{% endblock %}
 
 {% block content %}
-<!-- =====================================================
-     ADMIN / HISTORIAL POR COMPRADOR
-     - Muestra todas las órdenes de un comprador
-     - Permite filtrar por fechas
-     - Permite exportar el historial a Excel
-     ===================================================== -->
-
 <div class="card shadow-sm">
   <div class="card-body">
 
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
       <div>
         <h5 class="mb-0">Historial por comprador</h5>
 
         <small class="text-muted">
           Comprador:
           <b>{{ comprador_nombre }}</b>
-
-          {% if comprador_tipo == "registrado" %}
-            <span class="badge bg-primary ms-1">Registrado</span>
-          {% else %}
-            <span class="badge bg-secondary ms-1">No asociado</span>
-          {% endif %}
         </small>
+
+        <div class="mt-1">
+          {% if comprador_tipo == "registrado" %}
+            <span class="badge bg-primary">Registrado</span>
+          {% else %}
+            <span class="badge bg-secondary">No asociado</span>
+          {% endif %}
+        </div>
       </div>
 
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-secondary btn-sm"
            href="{{ url_for('admin_buyers') }}">
-          Volver
+          Volver a compradores
         </a>
 
         <a class="btn btn-outline-success btn-sm"
            href="{{ url_for('admin_buyer_history_export', key=key, start=start, end=end) }}">
-          Excel
+          Exportar Excel
         </a>
       </div>
     </div>
@@ -54,34 +49,68 @@
       <!-- Mantiene el comprador seleccionado -->
       <input type="hidden" name="key" value="{{ key }}">
 
-      <div class="col-12 col-md-3">
+      <div class="col-6 col-md-3">
         <label class="form-label mb-1">Desde</label>
-        <input type="date"
-               name="start"
-               class="form-control form-control-sm"
-               value="{{ start }}">
+        <input
+          type="date"
+          name="start"
+          class="form-control form-control-sm"
+          value="{{ start }}"
+        >
       </div>
 
-      <div class="col-12 col-md-3">
+      <div class="col-6 col-md-3">
         <label class="form-label mb-1">Hasta</label>
-        <input type="date"
-               name="end"
-               class="form-control form-control-sm"
-               value="{{ end }}">
+        <input
+          type="date"
+          name="end"
+          class="form-control form-control-sm"
+          value="{{ end }}"
+        >
       </div>
 
-      <div class="col-12 col-md-3 d-flex gap-2">
-        <button type="submit" class="btn btn-primary btn-sm w-100">
+      <div class="col-12 col-md-6 d-flex flex-wrap gap-2">
+        <button type="submit" class="btn btn-primary btn-sm flex-fill">
           Filtrar
         </button>
 
-        <a class="btn btn-outline-secondary btn-sm w-100"
+        <a class="btn btn-outline-secondary btn-sm flex-fill"
            href="{{ url_for('admin_buyer_history', key=key) }}">
           Limpiar
         </a>
+
+        <a class="btn btn-outline-success btn-sm flex-fill"
+           href="{{ url_for('admin_buyer_history_export', key=key, start=start, end=end) }}">
+          Excel
+        </a>
       </div>
 
-      <div class="col-12 col-md-3">
+    </form>
+
+    <!-- =====================================================
+         RESUMEN DEL RANGO
+         ===================================================== -->
+    <div class="row g-2 mb-3">
+
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-2 bg-white">
+          <small class="text-muted">Órdenes encontradas</small>
+          <div class="fw-bold">
+            {{ orders|length }}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-2 bg-white">
+          <small class="text-muted">Rango consultado</small>
+          <div class="fw-bold">
+            {{ start }} al {{ end }}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
         <div class="border rounded p-2 bg-white">
           <small class="text-muted">Total del rango</small>
           <div class="fw-bold">
@@ -90,27 +119,6 @@
         </div>
       </div>
 
-    </form>
-
-    <!-- =====================================================
-         RESUMEN
-         ===================================================== -->
-    <div class="row g-2 mb-3">
-      <div class="col-6 col-md-3">
-        <div class="border rounded p-2 bg-white">
-          <small class="text-muted">Órdenes</small>
-          <div class="fw-bold">{{ orders|length }}</div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-3">
-        <div class="border rounded p-2 bg-white">
-          <small class="text-muted">Total acumulado</small>
-          <div class="fw-bold">
-            ₡{{ "%.2f"|format(total_rango) }}
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- =====================================================
@@ -122,22 +130,29 @@
           <tr>
             <th style="width: 90px;">Orden</th>
             <th style="width: 180px;">Fecha</th>
-            <th style="width: 140px;">Pago</th>
-            <th style="width: 140px;">Estado</th>
-            <th style="width: 160px;">Total</th>
-            <th style="width: 120px;">Acción</th>
+            <th style="width: 130px;">Pago</th>
+            <th style="width: 130px;">Estado</th>
+            <th style="width: 150px;">Total</th>
+            <th style="width: 110px;">Acción</th>
           </tr>
         </thead>
 
         <tbody>
           {% for o in orders %}
-          <tr>
-            <td>#{{ o.id }}</td>
-            <td>{{ o.fecha }}</td>
+          {% set pago_norm = o.tipo_pago|string|lower|replace('é','e')|trim %}
+          {% set estado_norm = o.estado|string|lower|trim %}
 
-            <!-- Tipo de pago -->
+          <tr class="{% if estado_norm == 'pendiente' %}table-warning{% endif %}">
+
             <td>
-              {% set pago_norm = (o.tipo_pago|string|lower|trim).replace('é','e') %}
+              <b>#{{ o.id }}</b>
+            </td>
+
+            <td>
+              {{ o.fecha }}
+            </td>
+
+            <td>
               {% if pago_norm == "credito" %}
                 <span class="badge bg-warning text-dark">Crédito</span>
               {% else %}
@@ -145,9 +160,8 @@
               {% endif %}
             </td>
 
-            <!-- Estado -->
             <td>
-              {% if (o.estado|string|lower|trim) == "pendiente" %}
+              {% if estado_norm == "pendiente" %}
                 <span class="badge bg-danger">Pendiente</span>
               {% else %}
                 <span class="badge bg-primary">Pagada</span>
@@ -160,21 +174,31 @@
 
             <td>
               <a class="btn btn-outline-primary btn-sm"
-                 href="{{ url_for('admin_order_detail', order_id=o.id) }}">
+                 href="{{ url_for('admin_order_detail', order_id=o.id, from_page='buyer', buyer_key=key, start=start, end=end) }}">
                 Ver
               </a>
             </td>
+
           </tr>
 
           {% else %}
           <tr>
-            <td colspan="6" class="text-center text-muted">
-              No hay órdenes para este comprador.
+            <td colspan="6" class="text-center text-muted py-4">
+              No hay órdenes para este comprador en el rango seleccionado.
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <!-- =====================================================
+         NOTA INFORMATIVA
+         ===================================================== -->
+    <div class="alert alert-light border mt-3 mb-0">
+      <small class="text-muted">
+        Por defecto se muestran las compras de los últimos 14 días. Podés cambiar el rango de fechas o exportar el historial filtrado a Excel.
+      </small>
     </div>
 
   </div>
