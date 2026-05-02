@@ -5,53 +5,176 @@
 <div class="card shadow-sm">
   <div class="card-body">
 
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
       <div>
         <h5 class="mb-0">Nuevo producto</h5>
-        <small class="text-muted">Crear un producto con stock mínimo e imagen (opcional)</small>
+        <small class="text-muted">
+          Crear un producto con precio, stock, stock mínimo e imagen opcional
+        </small>
       </div>
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">Volver</a>
+
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+        Volver
+      </a>
     </div>
 
-    <form method="POST" enctype="multipart/form-data" class="mt-3">
+    <!-- =====================================================
+         FORMULARIO NUEVO PRODUCTO
+         ===================================================== -->
+    <form method="POST"
+          action="{{ url_for('admin_product_add') }}"
+          enctype="multipart/form-data"
+          class="mt-3">
+
+      <!-- Token CSRF -->
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
       <div class="row g-3">
 
+        <!-- Nombre -->
         <div class="col-12 col-md-6">
-          <label class="form-label">Nombre</label>
-          <input type="text" name="nombre" class="form-control" required>
+          <label class="form-label">Nombre del producto</label>
+          <input
+            type="text"
+            name="nombre"
+            class="form-control"
+            placeholder="Ej: Bebida, snack, artículo..."
+            required
+            autocomplete="off"
+          >
         </div>
 
+        <!-- Precio -->
         <div class="col-12 col-md-3">
-          <label class="form-label">Precio (₡)</label>
-          <input type="number" name="precio" class="form-control" step="0.01" min="0" required>
+          <label class="form-label">Precio ₡</label>
+          <input
+            type="number"
+            name="precio"
+            class="form-control"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            required
+          >
         </div>
 
+        <!-- Stock -->
         <div class="col-12 col-md-3">
-          <label class="form-label">Stock</label>
-          <input type="number" name="stock" class="form-control" min="0" required>
+          <label class="form-label">Stock inicial</label>
+          <input
+            type="number"
+            name="stock"
+            class="form-control"
+            min="0"
+            value="0"
+            required
+          >
         </div>
 
+        <!-- Stock mínimo -->
         <div class="col-12 col-md-3">
           <label class="form-label">Stock mínimo</label>
-          <input type="number" name="stock_minimo" class="form-control" min="0" value="0">
+          <input
+            type="number"
+            name="stock_minimo"
+            class="form-control"
+            min="0"
+            value="0"
+          >
+          <small class="text-muted">
+            Se usará para alertas de stock bajo.
+          </small>
         </div>
 
+        <!-- Estado activo -->
+        <div class="col-12 col-md-3 d-flex align-items-end">
+          <div class="form-check mb-2">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              name="activo"
+              id="activo"
+              checked
+            >
+            <label class="form-check-label" for="activo">
+              Producto activo
+            </label>
+          </div>
+        </div>
+
+        <!-- Imagen -->
         <div class="col-12 col-md-6">
-          <label class="form-label">Imagen (opcional)</label>
-          <input type="file" name="imagen" class="form-control" accept=".png,.jpg,.jpeg,.webp">
-          <div class="form-text">Formatos: png, jpg, jpeg, webp</div>
-        </div>
+          <label class="form-label">Imagen del producto</label>
+          <input
+            type="file"
+            name="imagen"
+            id="imagenProducto"
+            class="form-control"
+            accept=".png,.jpg,.jpeg,.webp"
+          >
+          <small class="text-muted">
+            Formatos permitidos: png, jpg, jpeg, webp. Tamaño máximo recomendado: 2 MB.
+          </small>
 
-        <div class="col-12">
-          <button class="btn btn-primary">Guardar producto</button>
-          <a class="btn btn-outline-secondary" href="{{ url_for('admin_products') }}">Cancelar</a>
+          <!-- Vista previa -->
+          <div id="previewBox" class="mt-3 d-none">
+            <small class="text-muted d-block mb-1">Vista previa:</small>
+            <img
+              id="previewImagen"
+              src=""
+              alt="Vista previa"
+              style="width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid #ddd;"
+            >
+          </div>
         </div>
 
       </div>
+
+      <!-- =====================================================
+           BOTONES
+           ===================================================== -->
+      <div class="d-flex flex-wrap gap-2 mt-4">
+        <button class="btn btn-primary" type="submit">
+          Guardar producto
+        </button>
+
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_products') }}">
+          Cancelar
+        </a>
+      </div>
+
     </form>
 
   </div>
 </div>
+
+<!-- =====================================================
+     JS: VISTA PREVIA DE IMAGEN
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("imagenProducto");
+    const previewBox = document.getElementById("previewBox");
+    const previewImagen = document.getElementById("previewImagen");
+
+    if (!input) return;
+
+    input.addEventListener("change", function () {
+      const file = input.files[0];
+
+      if (!file) {
+        previewBox.classList.add("d-none");
+        previewImagen.src = "";
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      previewImagen.src = url;
+      previewBox.classList.remove("d-none");
+    });
+  });
+</script>
 {% endblock %}
-
-

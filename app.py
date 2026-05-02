@@ -116,34 +116,106 @@ def close_db(exception=None):
 
 
 # =====================================================
-# FUNCIÓN AUXILIAR: ASEGURAR ESTRUCTURA ADICIONAL
+# FUNCIÓN AUXILIAR: ASEGURAR ESTRUCTURA DE BASE DE DATOS
+# - Sirve para bases ya existentes sin borrar información
 # - Crea audit_logs si no existe
-# - Agrega password_temporal si no existe en users
+# - Agrega columnas nuevas si faltan
+# - Crea índices recomendados si no existen
 # =====================================================
 def ensure_app_schema(db):
     try:
+        # =====================================================
+        # TABLA: audit_logs
+        # Guarda acciones administrativas importantes
+        # =====================================================
         db.execute("""
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha TEXT NOT NULL,
                 admin_id INTEGER,
-                admin_nombre TEXT,
+                admin_nombre TEXT NOT NULL DEFAULT 'Sistema',
                 accion TEXT NOT NULL,
                 detalle TEXT
             )
         """)
 
+        # =====================================================
+        # REVISAR COLUMNAS DE USERS
+        # =====================================================
         columnas_users = db.execute("PRAGMA table_info(users)").fetchall()
-        nombres_columnas = [c["name"] for c in columnas_users]
+        columnas_users = [c["name"] for c in columnas_users]
 
-        if nombres_columnas and "password_temporal" not in nombres_columnas:
-            db.execute("ALTER TABLE users ADD COLUMN password_temporal INTEGER DEFAULT 0")
+        if "password_temporal" not in columnas_users:
+            db.execute("""
+                ALTER TABLE users
+                ADD COLUMN password_temporal INTEGER NOT NULL DEFAULT 0
+            """)
+
+        # =====================================================
+        # REVISAR COLUMNAS DE PRODUCTS
+        # Esto ayuda si tu base vieja no tenía imagen o stock mínimo.
+        # =====================================================
+        columnas_products = db.execute("PRAGMA table_info(products)").fetchall()
+        columnas_products = [c["name"] for c in columnas_products]
+
+        if "stock_minimo" not in columnas_products:
+            db.execute("""
+                ALTER TABLE products
+                ADD COLUMN stock_minimo INTEGER NOT NULL DEFAULT 0
+            """)
+
+        if "image_filename" not in columnas_products:
+            db.execute("""
+                ALTER TABLE products
+                ADD COLUMN image_filename TEXT
+            """)
+
+        if "activo" not in columnas_products:
+            db.execute("""
+                ALTER TABLE products
+                ADD COLUMN activo INTEGER NOT NULL DEFAULT 1
+            """)
+
+        # =====================================================
+        # ÍNDICES RECOMENDADOS
+        # IF NOT EXISTS evita errores si ya fueron creados.
+        # =====================================================
+
+        # Usuarios
+        db.execute("CREATE INDEX IF NOT EXISTS idx_users_usuario ON users(usuario)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_users_estado ON users(estado)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_users_rol ON users(rol)")
+
+        # Productos
+        db.execute("CREATE INDEX IF NOT EXISTS idx_products_nombre ON products(nombre)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_products_activo ON products(activo)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock)")
+
+        # Órdenes
+        db.execute("CREATE INDEX IF NOT EXISTS idx_orders_fecha ON orders(fecha)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_orders_tipo_pago ON orders(tipo_pago)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_orders_estado ON orders(estado)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_orders_nombre_no_asociado ON orders(nombre_no_asociado)")
+
+        # Detalle de órdenes
+        db.execute("CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id)")
+
+        # Movimientos de stock
+        db.execute("CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(product_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_stock_movements_order_id ON stock_movements(order_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_stock_movements_fecha ON stock_movements(fecha)")
+
+        # Auditoría
+        db.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_fecha ON audit_logs(fecha)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_accion ON audit_logs(accion)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_admin_id ON audit_logs(admin_id)")
 
         db.commit()
 
     except sqlite3.OperationalError as e:
         print("Aviso al verificar estructura:", e)
-
 
 # =====================================================
 # FUNCIÓN AUXILIAR PARA VALIDAR IMÁGENES
