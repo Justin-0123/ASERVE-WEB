@@ -4,99 +4,181 @@
 {% block content %}
 <!-- =====================================================
      CARRITO DE COMPRAS
-     Lista items, permite + / - / eliminar / vaciar
+     - Lista productos agregados
+     - Permite aumentar, disminuir, quitar y vaciar
+     - Todos los formularios POST incluyen CSRF
      ===================================================== -->
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0">Carrito</h4>
+<div class="card shadow-sm">
+  <div class="card-body">
 
-  {% if items|length > 0 %}
-  <form method="POST" action="{{ url_for('carrito_clear') }}">
-    <button class="btn btn-outline-danger btn-sm">Vaciar carrito</button>
-  </form>
-  {% endif %}
-</div>
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+      <div>
+        <h4 class="mb-0">Carrito</h4>
+        <small class="text-muted">
+          Revisa los productos antes de finalizar la compra
+        </small>
+      </div>
 
-{% if items|length == 0 %}
-  <div class="alert alert-info">Tu carrito está vacío.</div>
-  <a class="btn btn-primary" href="{{ url_for('catalogo') }}">Volver al catálogo</a>
-{% else %}
+      {% if items|length > 0 %}
+      <form
+        method="POST"
+        action="{{ url_for('carrito_clear') }}"
+        onsubmit="return confirm('¿Seguro que deseas vaciar todo el carrito?');">
 
-  <div class="card shadow-sm">
-    <div class="card-body p-2">
-      <table class="table table-bordered align-middle mb-0">
-        <thead class="table-dark">
-          <tr>
-            <th>Producto</th>
-            <th style="width: 140px;">Cantidad</th>
-            <th style="width: 140px;">Subtotal</th>
-            <th style="width: 100px;">Acción</th>
-          </tr>
-        </thead>
-        <tbody>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-          {% for it in items %}
-          <tr>
-            <td>
-              <div class="d-flex gap-2 align-items-center">
-                {% if it.image_filename %}
-                  <img src="{{ url_for('static', filename='uploads/' ~ it.image_filename) }}"
-                       style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid #ddd;">
-                {% else %}
-                  <div class="bg-light d-flex align-items-center justify-content-center"
-                       style="width:60px;height:60px;border-radius:8px;border:1px solid #ddd;">
-                    <span class="text-muted small">N/A</span>
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+          Vaciar carrito
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+    <!-- =====================================================
+         CARRITO VACÍO
+         ===================================================== -->
+    {% if items|length == 0 %}
+
+      <div class="alert alert-info mb-3">
+        Tu carrito está vacío.
+      </div>
+
+      <a class="btn btn-primary btn-sm" href="{{ url_for('catalogo') }}">
+        Volver al catálogo
+      </a>
+
+    {% else %}
+
+      <!-- =====================================================
+           TABLA DE PRODUCTOS
+           ===================================================== -->
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Producto</th>
+              <th style="width: 150px;">Cantidad</th>
+              <th style="width: 140px;">Subtotal</th>
+              <th style="width: 120px;">Acción</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for it in items %}
+            <tr>
+
+              <!-- Producto -->
+              <td>
+                <div class="d-flex gap-2 align-items-center">
+
+                  {% if it.image_filename %}
+                    <img
+                      src="{{ url_for('static', filename='uploads/' ~ it.image_filename) }}"
+                      alt="{{ it.nombre }}"
+                      style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid #ddd;background:#fff;"
+                    >
+                  {% else %}
+                    <div
+                      class="bg-light d-flex align-items-center justify-content-center"
+                      style="width:60px;height:60px;border-radius:8px;border:1px solid #ddd;">
+                      <span class="text-muted small">N/A</span>
+                    </div>
+                  {% endif %}
+
+                  <div>
+                    <div class="fw-semibold">
+                      {{ it.nombre }}
+                    </div>
+
+                    <div class="text-muted small">
+                      ₡{{ "%.2f"|format(it.precio) }} · Stock disponible: {{ it.stock }}
+                    </div>
                   </div>
-                {% endif %}
 
-                <div>
-                  <div class="fw-semibold">{{ it.nombre }}</div>
-                  <div class="text-muted small">₡{{ "%.2f"|format(it.precio) }} • Stock: {{ it.stock }}</div>
                 </div>
-              </div>
-            </td>
+              </td>
 
-            <td>
-              <!-- =====================================================
-                   Controles de cantidad:
-                   - dec: resta 1
-                   - inc: suma 1 (valida stock)
-                   ===================================================== -->
-              <div class="d-flex gap-1">
-                <form method="POST" action="{{ url_for('carrito_dec', product_id=it.id) }}">
-                  <button class="btn btn-sm btn-outline-secondary">-</button>
+              <!-- Cantidad -->
+              <td>
+                <div class="d-flex align-items-center gap-1">
+
+                  <!-- Restar cantidad -->
+                  <form method="POST" action="{{ url_for('carrito_dec', product_id=it.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                      -
+                    </button>
+                  </form>
+
+                  <div class="px-2 fw-bold">
+                    {{ it.cantidad }}
+                  </div>
+
+                  <!-- Aumentar cantidad -->
+                  <form method="POST" action="{{ url_for('carrito_inc', product_id=it.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                      +
+                    </button>
+                  </form>
+
+                </div>
+              </td>
+
+              <!-- Subtotal -->
+              <td class="fw-semibold">
+                ₡{{ "%.2f"|format(it.subtotal) }}
+              </td>
+
+              <!-- Quitar -->
+              <td>
+                <form
+                  method="POST"
+                  action="{{ url_for('carrito_remove', product_id=it.id) }}"
+                  onsubmit="return confirm('¿Deseas quitar este producto del carrito?');">
+
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    Quitar
+                  </button>
                 </form>
+              </td>
 
-                <div class="px-2 d-flex align-items-center">{{ it.cantidad }}</div>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
 
-                <form method="POST" action="{{ url_for('carrito_inc', product_id=it.id) }}">
-                  <button class="btn btn-sm btn-outline-secondary">+</button>
-                </form>
-              </div>
-            </td>
+      <!-- =====================================================
+           TOTAL Y ACCIONES FINALES
+           ===================================================== -->
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mt-3">
 
-            <td class="fw-semibold">₡{{ "%.2f"|format(it.subtotal) }}</td>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('catalogo') }}">
+          Seguir comprando
+        </a>
 
-            <td>
-              <form method="POST" action="{{ url_for('carrito_remove', product_id=it.id) }}">
-                <button class="btn btn-sm btn-outline-danger">Quitar</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
+        <div class="fs-5">
+          Total:
+          <b>₡{{ "%.2f"|format(total) }}</b>
+        </div>
 
-        </tbody>
-      </table>
-    </div>
+        <a class="btn btn-success btn-sm" href="{{ url_for('checkout') }}">
+          Ir a pagar
+        </a>
+
+      </div>
+
+    {% endif %}
+
   </div>
-
-  <div class="d-flex justify-content-between align-items-center mt-3">
-    <a class="btn btn-outline-primary" href="{{ url_for('catalogo') }}">Seguir comprando</a>
-    <div class="fs-5">
-      Total: <b>₡{{ "%.2f"|format(total) }}</b>
-    </div>
-    <a class="btn btn-success" href="{{ url_for('checkout') }}">Ir a pagar</a>
-  </div>
-
-{% endif %}
+</div>
 {% endblock %}
