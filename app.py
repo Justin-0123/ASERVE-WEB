@@ -291,6 +291,12 @@ def registrar_auditoria(accion, detalle="", commit=False):
 # COMANDO CLI: BACKUP DB
 # Comando:
 # flask --app app.py backup-db
+#
+# Crea un respaldo ZIP local en la carpeta /backups
+# Incluye:
+# 1) Base de datos SQLite
+# 2) Imágenes subidas
+# 3) Archivo informativo
 # =====================================================
 @app.cli.command("backup-db")
 def backup_db_command():
@@ -301,29 +307,53 @@ def backup_db_command():
     backup_filename = f"respaldo_aserve_{fecha_backup}.zip"
     backup_path = os.path.join(backup_folder, backup_filename)
 
-    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        db_original_path = app.config["DATABASE"]
+    db_original_path = app.config["DATABASE"]
 
-        if os.path.exists(db_original_path):
+    if not os.path.exists(db_original_path):
+        print("❌ No se encontró la base de datos para generar el respaldo.")
+        print(f"Ruta esperada: {db_original_path}")
+        return
+
+    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+
+        # =====================================================
+        # 1) RESPALDAR BASE DE DATOS SQLITE
+        # Se usa source.backup(destination) para hacer una copia segura
+        # aunque la app esté abierta.
+        # =====================================================
+        temp_db_path = None
+        source = None
+        destination = None
+
+        try:
             with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
                 temp_db_path = temp_db.name
 
-            try:
-                source = sqlite3.connect(db_original_path)
-                destination = sqlite3.connect(temp_db_path)
+            source = sqlite3.connect(db_original_path)
+            destination = sqlite3.connect(temp_db_path)
 
-                with destination:
-                    source.backup(destination)
+            with destination:
+                source.backup(destination)
 
+            zip_file.write(
+                temp_db_path,
+                arcname="database/aserve.db"
+            )
+
+        finally:
+            if source:
                 source.close()
+
+            if destination:
                 destination.close()
 
-                zip_file.write(temp_db_path, arcname="database/aserve.db")
+            if temp_db_path and os.path.exists(temp_db_path):
+                os.remove(temp_db_path)
 
-            finally:
-                if os.path.exists(temp_db_path):
-                    os.remove(temp_db_path)
-
+        # =====================================================
+        # 2) RESPALDAR IMÁGENES SUBIDAS
+        # Normalmente están en static/uploads
+        # =====================================================
         upload_folder_abs = app.config["UPLOAD_FOLDER"]
 
         if not os.path.isabs(upload_folder_abs):
@@ -334,8 +364,15 @@ def backup_db_command():
                 for file in files:
                     file_path = os.path.join(root, file)
                     relative_path = os.path.relpath(file_path, upload_folder_abs)
-                    zip_file.write(file_path, arcname=os.path.join("uploads", relative_path))
 
+                    zip_file.write(
+                        file_path,
+                        arcname=os.path.join("uploads", relative_path)
+                    )
+
+        # =====================================================
+        # 3) ARCHIVO INFORMATIVO
+        # =====================================================
         info = f"""RESPALDO ASERVE
 Fecha de respaldo: {fecha_backup}
 
@@ -343,23 +380,40 @@ Contenido:
 - database/aserve.db
 - uploads/
 
-Este respaldo fue generado desde comando CLI.
+Origen:
+Este respaldo fue generado desde comando CLI con:
+flask --app app.py backup-db
+
+Notas:
+Este archivo contiene la base de datos SQLite y las imágenes subidas al sistema.
+
+Recomendación:
 Guardar este archivo en un lugar seguro.
+No compartirlo con personas no autorizadas, ya que puede contener información sensible del sistema.
 """
         zip_file.writestr("LEEME_RESPALDO.txt", info)
 
     print("✅ Respaldo creado correctamente.")
     print(f"Archivo: {backup_path}")
 
-
 # =====================================================
 # COMANDO CLI: RESTAURAR RESPALDO
 # Comando:
 # flask --app app.py restore-backup "backups/respaldo_aserve_XXXX.zip"
+#
+# IMPORTANTE:
+# - Detener Flask antes de restaurar.
+# - Crea un respaldo de emergencia antes de reemplazar datos.
+# - Restaura:
+#   1) database/aserve.db
+#   2) uploads/
 # =====================================================
 @app.cli.command("restore-backup")
 @click.argument("zip_path")
 def restore_backup_command(zip_path):
+    # =====================================================
+    # 1) VALIDAR ARCHIVO ZIP
+    # =====================================================
     if not os.path.exists(zip_path):
         print("❌ El archivo ZIP no existe.")
         print(f"Ruta recibida: {zip_path}")
@@ -380,6 +434,17 @@ def restore_backup_command(zip_path):
     os.makedirs(db_folder, exist_ok=True)
     os.makedirs(upload_folder_abs, exist_ok=True)
 
+    # =====================================================
+    # 2) VALIDAR CONTENIDO DEL RESPALDO ANTES DE TOCAR DATOS
+    # =====================================================
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_names = zip_ref.namelist()
+
+        if "database/aserve.db" not in zip_names:
+            print("❌ El respaldo no contiene database/aserve.db.")
+            print("No se restauró nada.")
+            return
+
     fecha_restore = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     backup_folder = os.path.join(os.getcwd(), "backups")
@@ -390,35 +455,59 @@ def restore_backup_command(zip_path):
         f"pre_restore_aserve_{fecha_restore}.zip"
     )
 
+    # =====================================================
+    # 3) CREAR RESPALDO DE EMERGENCIA
+    # =====================================================
     print("🟡 Creando respaldo de emergencia antes de restaurar...")
 
     with zipfile.ZipFile(pre_backup_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+
+        # -------------------------------------------------
+        # Respaldar DB actual de forma segura
+        # -------------------------------------------------
         if os.path.exists(db_path):
-            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-                temp_db_path = temp_db.name
+            temp_db_path = None
+            source = None
+            destination = None
 
             try:
+                with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
+                    temp_db_path = temp_db.name
+
                 source = sqlite3.connect(db_path)
                 destination = sqlite3.connect(temp_db_path)
 
                 with destination:
                     source.backup(destination)
 
-                source.close()
-                destination.close()
-
-                zip_file.write(temp_db_path, arcname="database/aserve.db")
+                zip_file.write(
+                    temp_db_path,
+                    arcname="database/aserve.db"
+                )
 
             finally:
-                if os.path.exists(temp_db_path):
+                if source:
+                    source.close()
+
+                if destination:
+                    destination.close()
+
+                if temp_db_path and os.path.exists(temp_db_path):
                     os.remove(temp_db_path)
 
+        # -------------------------------------------------
+        # Respaldar uploads actuales
+        # -------------------------------------------------
         if os.path.exists(upload_folder_abs):
             for root, dirs, files in os.walk(upload_folder_abs):
                 for file in files:
                     file_path = os.path.join(root, file)
                     relative_path = os.path.relpath(file_path, upload_folder_abs)
-                    zip_file.write(file_path, arcname=os.path.join("uploads", relative_path))
+
+                    zip_file.write(
+                        file_path,
+                        arcname=os.path.join("uploads", relative_path)
+                    )
 
         info = f"""RESPALDO DE EMERGENCIA ASERVE
 Fecha: {fecha_restore}
@@ -428,24 +517,54 @@ Este respaldo fue creado automáticamente antes de restaurar otro respaldo.
 Contenido:
 - database/aserve.db
 - uploads/
+
+Si algo sale mal, este archivo permite recuperar el estado anterior.
 """
         zip_file.writestr("LEEME_PRE_RESTORE.txt", info)
 
     print(f"✅ Respaldo de emergencia creado: {pre_backup_path}")
 
+    # =====================================================
+    # 4) EXTRAER RESPALDO EN CARPETA TEMPORAL DE FORMA SEGURA
+    # =====================================================
     with tempfile.TemporaryDirectory() as temp_dir:
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(temp_dir)
-
         restored_db = os.path.join(temp_dir, "database", "aserve.db")
         restored_uploads = os.path.join(temp_dir, "uploads")
 
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            for member in zip_ref.infolist():
+                member_name = member.filename.replace("\\", "/")
+
+                # Evitar rutas peligrosas
+                if member_name.startswith("/") or ".." in member_name.split("/"):
+                    print(f"⚠️ Archivo omitido por ruta insegura: {member.filename}")
+                    continue
+
+                # Solo restaurar lo esperado
+                if not (
+                    member_name == "database/aserve.db"
+                    or member_name.startswith("uploads/")
+                ):
+                    continue
+
+                target_path = os.path.join(temp_dir, member_name)
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+                if not member.is_dir():
+                    with zip_ref.open(member) as source_file:
+                        with open(target_path, "wb") as target_file:
+                            shutil.copyfileobj(source_file, target_file)
+
+        # Validar nuevamente después de extraer
         if not os.path.exists(restored_db):
-            print("❌ El respaldo no contiene database/aserve.db.")
+            print("❌ No se pudo extraer database/aserve.db.")
             print("No se restauró nada.")
             print(f"Tu respaldo de emergencia quedó en: {pre_backup_path}")
             return
 
+        # =====================================================
+        # 5) RESTAURAR BASE DE DATOS
+        # =====================================================
         print("🟡 Restaurando base de datos...")
 
         if os.path.exists(db_path):
@@ -455,6 +574,9 @@ Contenido:
 
         print("✅ Base de datos restaurada correctamente.")
 
+        # =====================================================
+        # 6) RESTAURAR IMÁGENES
+        # =====================================================
         print("🟡 Restaurando imágenes...")
 
         if os.path.exists(upload_folder_abs):
@@ -467,6 +589,9 @@ Contenido:
             os.makedirs(upload_folder_abs, exist_ok=True)
             print("⚠️ El respaldo no tenía carpeta uploads. Se creó vacía.")
 
+    # =====================================================
+    # 7) FINAL
+    # =====================================================
     print("")
     print("✅ RESTAURACIÓN COMPLETADA CORRECTAMENTE")
     print(f"Respaldo restaurado: {zip_path}")
@@ -474,7 +599,6 @@ Contenido:
     print("")
     print("Ahora podés iniciar Flask nuevamente con:")
     print("python app.py")
-
 
 # =====================================================
 # COMANDOS DE CONSOLA
@@ -1079,39 +1203,73 @@ def admin_audit_logs():
 
 # =====================================================
 # ADMIN: DESCARGAR RESPALDO
+# Ruta: /admin/backup/download
+# - Descarga un ZIP con:
+#   1) Base de datos SQLite
+#   2) Imágenes subidas de productos
+#   3) Archivo informativo
 # =====================================================
 @app.route("/admin/backup/download")
 def admin_backup_download():
     if "user_id" not in session or session.get("rol") != "admin":
         return redirect(url_for("login"))
 
+    db_original_path = app.config["DATABASE"]
+
+    # Validar que exista la base de datos
+    if not os.path.exists(db_original_path):
+        flash("No se encontró la base de datos para generar el respaldo.", "danger")
+        return redirect(url_for("admin_panel"))
+
+    # Asegurar estructura adicional antes de registrar auditoría
+    db = get_db()
+    ensure_app_schema(db)
+
     fecha_backup = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"respaldo_aserve_{fecha_backup}.zip"
+
     zip_buffer = BytesIO()
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        db_original_path = app.config["DATABASE"]
 
-        if os.path.exists(db_original_path):
+        # =====================================================
+        # 1) RESPALDAR BASE DE DATOS SQLITE
+        # Se usa source.backup(destination) para hacer una copia segura
+        # aunque la app esté abierta.
+        # =====================================================
+        temp_db_path = None
+        source = None
+        destination = None
+
+        try:
             with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
                 temp_db_path = temp_db.name
 
-            try:
-                source = sqlite3.connect(db_original_path)
-                destination = sqlite3.connect(temp_db_path)
+            source = sqlite3.connect(db_original_path)
+            destination = sqlite3.connect(temp_db_path)
 
-                with destination:
-                    source.backup(destination)
+            with destination:
+                source.backup(destination)
 
+            zip_file.write(
+                temp_db_path,
+                arcname="database/aserve.db"
+            )
+
+        finally:
+            if source:
                 source.close()
+
+            if destination:
                 destination.close()
 
-                zip_file.write(temp_db_path, arcname="database/aserve.db")
+            if temp_db_path and os.path.exists(temp_db_path):
+                os.remove(temp_db_path)
 
-            finally:
-                if os.path.exists(temp_db_path):
-                    os.remove(temp_db_path)
-
+        # =====================================================
+        # 2) RESPALDAR IMÁGENES SUBIDAS
+        # Normalmente están en static/uploads
+        # =====================================================
         upload_folder_abs = app.config["UPLOAD_FOLDER"]
 
         if not os.path.isabs(upload_folder_abs):
@@ -1122,8 +1280,15 @@ def admin_backup_download():
                 for file in files:
                     file_path = os.path.join(root, file)
                     relative_path = os.path.relpath(file_path, upload_folder_abs)
-                    zip_file.write(file_path, arcname=os.path.join("uploads", relative_path))
 
+                    zip_file.write(
+                        file_path,
+                        arcname=os.path.join("uploads", relative_path)
+                    )
+
+        # =====================================================
+        # 3) ARCHIVO INFORMATIVO
+        # =====================================================
         info = f"""RESPALDO ASERVE
 Fecha de respaldo: {fecha_backup}
 
@@ -1132,13 +1297,20 @@ Contenido:
 - uploads/
 
 Notas:
-Este archivo contiene la base de datos y las imágenes subidas al sistema.
-Guardarlo en un lugar seguro.
+Este archivo contiene la base de datos SQLite y las imágenes subidas al sistema.
+
+Recomendación:
+Guardar este archivo en un lugar seguro.
+No compartirlo con personas no autorizadas, ya que puede contener información sensible del sistema.
 """
+
         zip_file.writestr("LEEME_RESPALDO.txt", info)
 
     zip_buffer.seek(0)
 
+    # =====================================================
+    # AUDITORÍA
+    # =====================================================
     registrar_auditoria(
         "Descargar respaldo",
         f"Se generó y descargó el respaldo '{filename}'. Incluye base de datos e imágenes del sistema.",
@@ -1151,7 +1323,6 @@ Guardarlo en un lugar seguro.
         download_name=filename,
         mimetype="application/zip"
     )
-
 
 # =====================================================
 # ADMIN: USUARIOS
@@ -1518,7 +1689,6 @@ def mis_compras_detalle(order_id):
             id,
             fecha,
             tipo_pago,
-            estado,
             total
         FROM orders
         WHERE id = ?
@@ -1541,6 +1711,7 @@ def mis_compras_detalle(order_id):
         FROM order_items oi
         JOIN products p ON p.id = oi.product_id
         WHERE oi.order_id = ?
+        ORDER BY p.nombre ASC
         """,
         (order_id,)
     ).fetchall()
@@ -1553,9 +1724,12 @@ def mis_compras_detalle(order_id):
 
 # =====================================================
 # ADMIN: HISTORIAL DE ÓRDENES
-# - Lista órdenes del sistema
-# - Filtra por estado, tipo de pago, comprador, código o número de orden
-# - Por defecto muestra últimos 14 días
+# - Muestra historial general de compras
+# - Filtra por estado, tipo de pago, comprador/código y fechas
+# - Regla de búsqueda:
+#   830  = busca código/usuario
+#   #830 = busca número exacto de orden
+#   Ana  = busca nombre de comprador
 # =====================================================
 @app.route("/admin/orders")
 def admin_orders():
@@ -1584,34 +1758,79 @@ def admin_orders():
     where = []
     params = []
 
-    # Filtro por estado
+    # =====================================================
+    # FILTRO POR ESTADO
+    # =====================================================
     if estado in ("pagada", "pendiente"):
         where.append("lower(trim(o.estado)) = ?")
         params.append(estado)
+    else:
+        estado = ""
 
-    # Filtro por tipo de pago
+    # =====================================================
+    # FILTRO POR TIPO DE PAGO
+    # =====================================================
     if pago in ("contado", "credito"):
         where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
         params.append(pago)
+    else:
+        pago = ""
 
-    # Filtro por comprador, código de colaborador o número de orden
+    # =====================================================
+    # BÚSQUEDA
+    # Reglas:
+    # - #15 busca exactamente la orden 15
+    # - 830 busca código/usuario 830
+    # - Ana busca por nombre de comprador
+    # =====================================================
     if q:
-        where.append("""
-            (
-                u.nombre LIKE ?
-                OR u.usuario LIKE ?
-                OR o.nombre_no_asociado LIKE ?
-                OR CAST(o.id AS TEXT) LIKE ?
-            )
-        """)
-        params.extend([
-            f"%{q}%",
-            f"%{q}%",
-            f"%{q}%",
-            f"%{q}%"
-        ])
+        q_clean = q.strip()
 
-    # Filtro por fechas
+        if q_clean.startswith("#"):
+            orden_busqueda = q_clean.replace("#", "", 1).strip()
+
+            if orden_busqueda.isdigit():
+                where.append("o.id = ?")
+                params.append(int(orden_busqueda))
+            else:
+                # Si escriben algo como #abc, no devuelve resultados
+                where.append("1 = 0")
+
+        elif q_clean.isdigit():
+            where.append(
+                """
+                (
+                    u.usuario = ?
+                    OR u.nombre LIKE ?
+                    OR o.nombre_no_asociado LIKE ?
+                )
+                """
+            )
+            params.extend([
+                q_clean,
+                f"%{q_clean}%",
+                f"%{q_clean}%"
+            ])
+
+        else:
+            where.append(
+                """
+                (
+                    u.nombre LIKE ?
+                    OR u.usuario LIKE ?
+                    OR o.nombre_no_asociado LIKE ?
+                )
+                """
+            )
+            params.extend([
+                f"%{q_clean}%",
+                f"%{q_clean}%",
+                f"%{q_clean}%"
+            ])
+
+    # =====================================================
+    # FILTRO POR FECHAS
+    # =====================================================
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -1622,6 +1841,24 @@ def admin_orders():
 
     db = get_db()
 
+    # =====================================================
+    # RESUMEN DEL FILTRO
+    # =====================================================
+    resumen = db.execute(
+        f"""
+        SELECT
+            COUNT(o.id) AS num_ordenes,
+            COALESCE(SUM(o.total), 0) AS total_filtro
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        {where_sql}
+        """,
+        params
+    ).fetchone()
+
+    # =====================================================
+    # LISTA DE ÓRDENES
+    # =====================================================
     orders = db.execute(
         f"""
         SELECT
@@ -1643,15 +1880,19 @@ def admin_orders():
         pago=pago,
         q=q,
         start=start,
-        end=end
+        end=end,
+        num_ordenes=resumen["num_ordenes"] if resumen else 0,
+        total_filtro=float(resumen["total_filtro"]) if resumen else 0
     )
 
 # =====================================================
 # ADMIN: EXPORTAR HISTORIAL DE ÓRDENES
-# - Exporta el historial de compras usando los mismos filtros
-#   de la pantalla /admin/orders
-# - Busca por nombre, código de colaborador, no asociado u orden
-# - Genera 2 hojas:
+# - Respeta los mismos filtros de /admin/orders
+# - Regla de búsqueda:
+#   830  = busca código/usuario
+#   #830 = busca número exacto de orden
+#   Ana  = busca nombre de comprador
+# - Genera Excel con:
 #   1) Órdenes
 #   2) Detalle productos
 # =====================================================
@@ -1682,34 +1923,78 @@ def admin_orders_export():
     where = []
     params = []
 
-    # Filtro por estado
+    # =====================================================
+    # FILTRO POR ESTADO
+    # =====================================================
     if estado in ("pagada", "pendiente"):
         where.append("lower(trim(o.estado)) = ?")
         params.append(estado)
+    else:
+        estado = ""
 
-    # Filtro por tipo de pago
+    # =====================================================
+    # FILTRO POR PAGO
+    # =====================================================
     if pago in ("contado", "credito"):
         where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
         params.append(pago)
+    else:
+        pago = ""
 
-    # Filtro por comprador, código de colaborador o número de orden
+    # =====================================================
+    # BÚSQUEDA
+    # Reglas:
+    # - #15 busca exactamente la orden 15
+    # - 830 busca código/usuario 830
+    # - Ana busca por nombre de comprador
+    # =====================================================
     if q:
-        where.append("""
-            (
-                u.nombre LIKE ?
-                OR u.usuario LIKE ?
-                OR o.nombre_no_asociado LIKE ?
-                OR CAST(o.id AS TEXT) LIKE ?
-            )
-        """)
-        params.extend([
-            f"%{q}%",
-            f"%{q}%",
-            f"%{q}%",
-            f"%{q}%"
-        ])
+        q_clean = q.strip()
 
-    # Filtro por fechas
+        if q_clean.startswith("#"):
+            orden_busqueda = q_clean.replace("#", "", 1).strip()
+
+            if orden_busqueda.isdigit():
+                where.append("o.id = ?")
+                params.append(int(orden_busqueda))
+            else:
+                where.append("1 = 0")
+
+        elif q_clean.isdigit():
+            where.append(
+                """
+                (
+                    u.usuario = ?
+                    OR u.nombre LIKE ?
+                    OR o.nombre_no_asociado LIKE ?
+                )
+                """
+            )
+            params.extend([
+                q_clean,
+                f"%{q_clean}%",
+                f"%{q_clean}%"
+            ])
+
+        else:
+            where.append(
+                """
+                (
+                    u.nombre LIKE ?
+                    OR u.usuario LIKE ?
+                    OR o.nombre_no_asociado LIKE ?
+                )
+                """
+            )
+            params.extend([
+                f"%{q_clean}%",
+                f"%{q_clean}%",
+                f"%{q_clean}%"
+            ])
+
+    # =====================================================
+    # FILTRO POR FECHAS
+    # =====================================================
     where.append("date(o.fecha) >= date(?)")
     params.append(start)
 
@@ -1744,7 +2029,7 @@ def admin_orders_export():
     ).fetchone()
 
     # =====================================================
-    # ÓRDENES
+    # HOJA 1: ÓRDENES
     # =====================================================
     orders = db.execute(
         f"""
@@ -1765,7 +2050,7 @@ def admin_orders_export():
     ).fetchall()
 
     # =====================================================
-    # DETALLE DE PRODUCTOS
+    # HOJA 2: DETALLE PRODUCTOS
     # =====================================================
     detalle = db.execute(
         f"""
@@ -1796,6 +2081,9 @@ def admin_orders_export():
     # =====================================================
     wb = Workbook()
 
+    # =====================================================
+    # ESTILOS
+    # =====================================================
     fill_header = PatternFill("solid", fgColor="1F2328")
     fill_title = PatternFill("solid", fgColor="EAF2F8")
 
@@ -1852,16 +2140,16 @@ def admin_orders_export():
     ws["A6"].fill = fill_title
 
     ws["A7"] = "Órdenes"
-    ws["B7"] = resumen["num_ordenes"]
+    ws["B7"] = resumen["num_ordenes"] if resumen else 0
 
     ws["A8"] = "Total general"
-    ws["B8"] = float(resumen["total_general"])
+    ws["B8"] = float(resumen["total_general"]) if resumen else 0
 
     ws["A9"] = "Contado"
-    ws["B9"] = float(resumen["total_contado"])
+    ws["B9"] = float(resumen["total_contado"]) if resumen else 0
 
     ws["A10"] = "Crédito"
-    ws["B10"] = float(resumen["total_credito"])
+    ws["B10"] = float(resumen["total_credito"]) if resumen else 0
 
     for row in ws.iter_rows(min_row=6, max_row=10, min_col=1, max_col=2):
         for cell in row:
@@ -1902,7 +2190,7 @@ def admin_orders_export():
         ws.cell(row=current_row, column=1).value = f"#{o['id']}"
         ws.cell(row=current_row, column=2).value = o["fecha"]
         ws.cell(row=current_row, column=3).value = o["comprador"]
-        ws.cell(row=current_row, column=4).value = o["codigo_usuario"]
+        ws.cell(row=current_row, column=4).value = o["codigo_usuario"] or "No aplica"
         ws.cell(row=current_row, column=5).value = o["tipo_pago"]
         ws.cell(row=current_row, column=6).value = o["estado"]
         ws.cell(row=current_row, column=7).value = float(o["total"])
@@ -1917,12 +2205,7 @@ def admin_orders_export():
         current_row += 1
 
     if not orders:
-        ws.merge_cells(
-            start_row=current_row,
-            start_column=1,
-            end_row=current_row,
-            end_column=7
-        )
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=7)
         ws.cell(row=current_row, column=1).value = "Sin datos para los filtros seleccionados."
         ws.cell(row=current_row, column=1).alignment = alignment_center
 
@@ -1983,7 +2266,7 @@ def admin_orders_export():
         ws2.cell(row=current_row, column=1).value = f"#{d['order_id']}"
         ws2.cell(row=current_row, column=2).value = d["fecha"]
         ws2.cell(row=current_row, column=3).value = d["comprador"]
-        ws2.cell(row=current_row, column=4).value = d["codigo_usuario"]
+        ws2.cell(row=current_row, column=4).value = d["codigo_usuario"] or "No aplica"
         ws2.cell(row=current_row, column=5).value = d["tipo_pago"]
         ws2.cell(row=current_row, column=6).value = d["estado"]
         ws2.cell(row=current_row, column=7).value = float(d["total_orden"])
@@ -2004,12 +2287,7 @@ def admin_orders_export():
         current_row += 1
 
     if not detalle:
-        ws2.merge_cells(
-            start_row=current_row,
-            start_column=1,
-            end_row=current_row,
-            end_column=11
-        )
+        ws2.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=11)
         ws2.cell(row=current_row, column=1).value = "Sin detalle de productos para los filtros seleccionados."
         ws2.cell(row=current_row, column=1).alignment = alignment_center
 
@@ -3795,12 +4073,14 @@ def carrito_clear():
     flash("Carrito vaciado.", "info")
 
     return redirect(url_for("ver_carrito"))
+
 # =====================================================
 # CHECKOUT
 # - Valida stock antes de confirmar
-# - Evita doble compra con token interno
+# - Evita reenvío normal del formulario con token interno
 # - Calcula total siempre desde base de datos
 # - Usa bloqueo transaccional para proteger inventario
+# - Descuenta stock con validación directa en UPDATE
 # =====================================================
 @app.route("/checkout", methods=["GET", "POST"])
 def checkout():
@@ -3813,14 +4093,47 @@ def checkout():
     db = get_db()
 
     # =====================================================
-    # GET: mostrar pantalla de confirmación
+    # VALIDAR CARRITO
+    # Convierte IDs y cantidades a valores seguros.
+    # =====================================================
+    try:
+        cart_limpio = {}
+
+        for pid, cantidad in cart.items():
+            pid_limpio = str(int(pid))
+            cantidad_limpia = int(cantidad)
+
+            if cantidad_limpia <= 0:
+                flash("Hay una cantidad inválida en el carrito.", "warning")
+                return redirect(url_for("ver_carrito"))
+
+            cart_limpio[pid_limpio] = cantidad_limpia
+
+    except ValueError:
+        session["cart"] = {}
+        session.pop("checkout_token", None)
+        flash("El carrito tenía datos inválidos y fue limpiado.", "warning")
+        return redirect(url_for("catalogo"))
+
+    if not cart_limpio:
+        session["cart"] = {}
+        session.pop("checkout_token", None)
+        flash("Tu carrito está vacío.", "info")
+        return redirect(url_for("catalogo"))
+
+    # =====================================================
+    # GET: MOSTRAR PANTALLA DE CONFIRMACIÓN
     # =====================================================
     if request.method == "GET":
-        ids = list(cart.keys())
+        ids = list(cart_limpio.keys())
         placeholders = ",".join(["?"] * len(ids))
 
         productos = db.execute(
-            f"SELECT * FROM products WHERE id IN ({placeholders})",
+            f"""
+            SELECT *
+            FROM products
+            WHERE id IN ({placeholders})
+            """,
             ids
         ).fetchall()
 
@@ -3829,17 +4142,11 @@ def checkout():
         items = []
         total = 0
 
-        for pid, cantidad_cart in cart.items():
-            p = productos_map.get(str(pid))
+        for pid, cantidad in cart_limpio.items():
+            p = productos_map.get(pid)
 
             if not p:
                 flash("Uno de los productos del carrito ya no existe.", "warning")
-                return redirect(url_for("ver_carrito"))
-
-            cantidad = int(cantidad_cart)
-
-            if cantidad <= 0:
-                flash("Hay una cantidad inválida en el carrito.", "warning")
                 return redirect(url_for("ver_carrito"))
 
             if int(p["activo"]) != 1:
@@ -3867,9 +4174,10 @@ def checkout():
         es_no_asociado = True if not user_id else False
         can_credit = True if (user_id and rol in ("admin", "asociado")) else False
 
-        # Token interno para evitar doble submit
+        # Token interno para evitar reenvío normal del formulario
         checkout_token = secrets.token_urlsafe(24)
         session["checkout_token"] = checkout_token
+        session.modified = True
 
         return render_template(
             "checkout.html",
@@ -3882,12 +4190,13 @@ def checkout():
         )
 
     # =====================================================
-    # POST: confirmar compra
+    # POST: CONFIRMAR COMPRA
     # =====================================================
     token_form = (request.form.get("checkout_token") or "").strip()
     token_session = session.get("checkout_token")
 
     if not token_session or token_form != token_session:
+        session.pop("checkout_token", None)
         flash("Esta compra ya fue procesada o el formulario expiró. Revisá tu carrito antes de continuar.", "warning")
         return redirect(url_for("ver_carrito"))
 
@@ -3902,6 +4211,9 @@ def checkout():
     rol = session.get("rol")
     tipo_usuario = "asociado" if user_id else "no_asociado"
 
+    # =====================================================
+    # VALIDACIONES DE TIPO DE USUARIO / PAGO
+    # =====================================================
     if tipo_usuario == "no_asociado":
         if tipo_pago != "contado":
             flash("Solo usuarios registrados pueden comprar a crédito.", "danger")
@@ -3917,14 +4229,21 @@ def checkout():
             return redirect(url_for("checkout"))
 
     try:
-        # Bloqueo de escritura para evitar que dos compras descuenten el mismo stock al mismo tiempo
+        # =====================================================
+        # TRANSACCIÓN
+        # BEGIN IMMEDIATE bloquea escritura para proteger stock
+        # =====================================================
         db.execute("BEGIN IMMEDIATE")
 
-        ids = list(cart.keys())
+        ids = list(cart_limpio.keys())
         placeholders = ",".join(["?"] * len(ids))
 
         productos = db.execute(
-            f"SELECT * FROM products WHERE id IN ({placeholders})",
+            f"""
+            SELECT *
+            FROM products
+            WHERE id IN ({placeholders})
+            """,
             ids
         ).fetchall()
 
@@ -3933,19 +4252,15 @@ def checkout():
         items = []
         total = 0
 
-        for pid, cantidad_cart in cart.items():
-            p = productos_map.get(str(pid))
+        # =====================================================
+        # VALIDAR NUEVAMENTE STOCK DESDE BASE DE DATOS
+        # =====================================================
+        for pid, cantidad in cart_limpio.items():
+            p = productos_map.get(pid)
 
             if not p:
                 db.rollback()
                 flash("Uno de los productos del carrito ya no existe.", "warning")
-                return redirect(url_for("ver_carrito"))
-
-            cantidad = int(cantidad_cart)
-
-            if cantidad <= 0:
-                db.rollback()
-                flash("Hay una cantidad inválida en el carrito.", "warning")
                 return redirect(url_for("ver_carrito"))
 
             if int(p["activo"]) != 1:
@@ -3972,9 +4287,20 @@ def checkout():
         estado = "pagada" if tipo_pago == "contado" else "pendiente"
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # =====================================================
+        # CREAR ORDEN
+        # =====================================================
         cur = db.execute(
             """
-            INSERT INTO orders (fecha, tipo_usuario, user_id, nombre_no_asociado, tipo_pago, total, estado)
+            INSERT INTO orders (
+                fecha,
+                tipo_usuario,
+                user_id,
+                nombre_no_asociado,
+                tipo_pago,
+                total,
+                estado
+            )
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -3990,37 +4316,83 @@ def checkout():
 
         order_id = cur.lastrowid
 
+        # =====================================================
+        # INSERTAR DETALLE Y DESCONTAR STOCK
+        # =====================================================
         for it in items:
             db.execute(
                 """
-                INSERT INTO order_items (order_id, product_id, cantidad, precio_unitario)
+                INSERT INTO order_items (
+                    order_id,
+                    product_id,
+                    cantidad,
+                    precio_unitario
+                )
                 VALUES (?, ?, ?, ?)
                 """,
-                (order_id, it["id"], it["cantidad"], float(it["precio"]))
+                (
+                    order_id,
+                    it["id"],
+                    it["cantidad"],
+                    float(it["precio"])
+                )
             )
 
-            db.execute(
+            # Descuento protegido:
+            # solo descuenta si el producto sigue activo y tiene stock suficiente.
+            stock_update = db.execute(
                 """
                 UPDATE products
                 SET stock = stock - ?
                 WHERE id = ?
+                  AND activo = 1
+                  AND stock >= ?
                 """,
-                (it["cantidad"], it["id"])
+                (
+                    it["cantidad"],
+                    it["id"],
+                    it["cantidad"]
+                )
             )
+
+            if stock_update.rowcount != 1:
+                db.rollback()
+                flash(f"No se pudo descontar stock de '{it['nombre']}'. Intentá nuevamente.", "warning")
+                return redirect(url_for("ver_carrito"))
 
             db.execute(
                 """
-                INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+                INSERT INTO stock_movements (
+                    product_id,
+                    cambio_stock,
+                    motivo,
+                    fecha,
+                    order_id
+                )
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (it["id"], -it["cantidad"], "Venta", fecha, order_id)
+                (
+                    it["id"],
+                    -it["cantidad"],
+                    "Venta",
+                    fecha,
+                    order_id
+                )
             )
 
         db.commit()
 
-        # Limpiar carrito y token para que no se pueda reenviar la misma compra
+        # =====================================================
+        # LIMPIAR CARRITO Y TOKEN
+        # =====================================================
         session["cart"] = {}
         session.pop("checkout_token", None)
+
+        # Guarda la última orden creada en esta sesión.
+        # Esto permite que un comprador no asociado vea su comprobante
+        # sin dejar abierta la ruta para cualquier persona.
+        session["last_order_id"] = order_id
+        session.modified = True
 
         flash(f"✅ Compra realizada. Orden #{order_id} creada.", "success")
         return redirect(url_for("order_success", order_id=order_id))
@@ -4033,6 +4405,11 @@ def checkout():
 
 # =====================================================
 # ORDEN SUCCESS
+# - Muestra comprobante de compra
+# - Protege la orden para que no se pueda ver cambiando el ID en la URL
+# - Asociado: solo ve sus propias órdenes
+# - Admin: puede ver cualquier orden
+# - No asociado: solo puede ver la orden recién creada en su sesión
 # =====================================================
 @app.route("/orden/<int:order_id>")
 def order_success(order_id):
@@ -4054,8 +4431,43 @@ def order_success(order_id):
         flash("Orden no encontrada.", "danger")
         return redirect(url_for("catalogo"))
 
+    # =====================================================
+    # SEGURIDAD DE ACCESO A LA ORDEN
+    # =====================================================
+    usuario_logueado = session.get("user_id")
+    rol = session.get("rol")
+    last_order_id = session.get("last_order_id")
+
+    puede_ver = False
+
+    # Admin puede ver cualquier comprobante
+    if usuario_logueado and rol == "admin":
+        puede_ver = True
+
+    # Asociado solo puede ver sus propias órdenes
+    elif usuario_logueado and orden["user_id"] == usuario_logueado:
+        puede_ver = True
+
+    # No asociado solo puede ver la orden recién creada en esa misma sesión
+    elif not orden["user_id"] and last_order_id == order_id:
+        puede_ver = True
+
+    if not puede_ver:
+        flash("No tenés permiso para ver esta orden.", "warning")
+
+        if usuario_logueado:
+            return redirect(url_for("mis_compras"))
+
+        return redirect(url_for("catalogo"))
+
+    # =====================================================
+    # NOMBRE DEL COMPRADOR
+    # =====================================================
     comprador = orden["nombre_usuario"] if orden["user_id"] else orden["nombre_no_asociado"]
 
+    # =====================================================
+    # DETALLE DE PRODUCTOS
+    # =====================================================
     items = db.execute(
         """
         SELECT
@@ -4076,8 +4488,6 @@ def order_success(order_id):
         items=items,
         comprador=comprador
     )
-
-
 # =====================================================
 # EJECUCIÓN LOCAL
 # =====================================================
