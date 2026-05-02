@@ -765,12 +765,151 @@ def admin_audit_logs():
         return redirect(url_for("login"))
 
     db = get_db()
+
+    # Asegura que la tabla audit_logs exista
+    # Si ya tenés esta función creada, dejala.
     ensure_app_schema(db)
 
     accion = (request.args.get("accion") or "").strip()
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
     ver_detalle = (request.args.get("ver_detalle") or "").strip() == "1"
+
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
+    hoy = datetime.now().date()
+    hace_14 = hoy - timedelta(days=13)
+
+    if not start:
+        start = hace_14.strftime("%Y-%m-%d")
+
+    if not end:
+        end = hoy.strftime("%Y-%m-%d")
+
+    # =====================================================
+    # ACCIONES DISPONIBLES PARA EL SELECT
+    # Se muestran todas las acciones registradas.
+    # =====================================================
+    acciones_disponibles = db.execute(
+        """
+        SELECT DISTINCT accion
+        FROM audit_logs
+        WHERE accion IS NOT NULL
+          AND TRIM(accion) <> ''
+        ORDER BY accion ASC
+        """
+    ).fetchall()
+
+    # =====================================================
+    # WHERE DINÁMICO PARA FILTROS
+    # =====================================================
+    where = []
+    params = []
+
+    where.append("date(fecha) >= date(?)")
+    params.append(start)
+
+    where.append("date(fecha) <= date(?)")
+    params.append(end)
+
+    if accion:
+        where.append("accion = ?")
+        params.append(accion)
+
+    where_sql = "WHERE " + " AND ".join(where)
+
+    # =====================================================
+    # RESUMEN GENERAL
+    # =====================================================
+    resumen_base = db.execute(
+        f"""
+        SELECT
+            COUNT(id) AS total_acciones,
+            COUNT(DISTINCT accion) AS tipos_acciones
+        FROM audit_logs
+        {where_sql}
+        """,
+        params
+    ).fetchone()
+
+    ultima = db.execute(
+        f"""
+        SELECT fecha, accion
+        FROM audit_logs
+        {where_sql}
+        ORDER BY fecha DESC, id DESC
+        LIMIT 1
+        """,
+        params
+    ).fetchone()
+
+    if ultima:
+        ultima_fecha = ultima["fecha"]
+        ultima_accion_nombre = ultima["accion"]
+    else:
+        ultima_fecha = None
+        ultima_accion_nombre = None
+
+    resumen_general = {
+        "total_acciones": resumen_base["total_acciones"] if resumen_base else 0,
+        "tipos_acciones": resumen_base["tipos_acciones"] if resumen_base else 0,
+        "ultima_fecha": ultima_fecha,
+        "ultima_accion": ultima_accion_nombre
+    }
+    
+    # =====================================================
+    # RESUMEN POR ACCIÓN
+    # =====================================================
+    resumen_acciones = db.execute(
+        f"""
+        SELECT
+            accion,
+            COUNT(id) AS cantidad,
+            MAX(fecha) AS ultima_fecha
+        FROM audit_logs
+        {where_sql}
+        GROUP BY accion
+        ORDER BY cantidad DESC, ultima_fecha DESC
+        """,
+        params
+    ).fetchall()
+
+    # =====================================================
+    # DETALLE INDIVIDUAL
+    # Solo se consulta cuando el usuario pide ver detalle
+    # o entra desde una acción específica.
+    # =====================================================
+    logs = []
+
+    if ver_detalle or accion:
+        logs = db.execute(
+            f"""
+            SELECT
+                id,
+                fecha,
+                admin_nombre,
+                accion,
+                detalle
+            FROM audit_logs
+            {where_sql}
+            ORDER BY fecha DESC, id DESC
+            LIMIT 300
+            """,
+            params
+        ).fetchall()
+
+    return render_template(
+        "admin_audit_logs.html",
+        accion=accion,
+        acciones_disponibles=acciones_disponibles,
+        start=start,
+        end=end,
+        ver_detalle=ver_detalle,
+        resumen_general=resumen_general,
+        resumen_acciones=resumen_acciones,
+        logs=logs
+    )
 
     # =====================================================
     # DEFAULT: últimos 14 días
