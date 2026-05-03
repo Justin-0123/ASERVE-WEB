@@ -69,13 +69,26 @@
     <div class="admin-buyers-search mb-3">
       <label class="form-label mb-1">Buscar comprador</label>
 
-      <input
-        id="buyerSearch"
-        type="text"
-        class="form-control form-control-sm"
-        placeholder="Ej: nombre del comprador, registrado o no asociado"
-        autocomplete="off"
-      >
+      <div class="input-group">
+        <span class="input-group-text bg-white">
+          🔎
+        </span>
+
+        <input
+          id="buyerSearch"
+          type="text"
+          class="form-control form-control-sm"
+          placeholder="Ej: nombre, registrado o no asociado"
+          autocomplete="off"
+        >
+
+        <button
+          class="btn btn-outline-secondary btn-sm"
+          type="button"
+          id="buyerClearSearch">
+          Limpiar
+        </button>
+      </div>
 
       <small class="text-muted">
         Podés buscar por nombre, registrado o no asociado.
@@ -87,9 +100,11 @@
          ===================================================== -->
     <div class="d-md-none">
       {% for b in buyers %}
+        {% set tipo_search = "registrado asociado" if b.tipo == "registrado" else "no asociado no_asociado" %}
+
         <div
-          class="admin-buyers-mobile-item buyer-item"
-          data-search="{{ b.comprador|lower }} {{ b.tipo|lower }}">
+          class="admin-buyers-mobile-item {% if b.tipo != 'registrado' %}admin-buyers-mobile-secondary{% endif %} buyer-item"
+          data-search="{{ b.comprador|lower }} {{ tipo_search }}">
 
           <div class="d-flex justify-content-between align-items-start gap-2">
 
@@ -154,9 +169,11 @@
 
           <tbody>
             {% for b in buyers %}
+            {% set tipo_search = "registrado asociado" if b.tipo == "registrado" else "no asociado no_asociado" %}
+
             <tr
               class="buyer-item"
-              data-search="{{ b.comprador|lower }} {{ b.tipo|lower }}">
+              data-search="{{ b.comprador|lower }} {{ tipo_search }}">
 
               <td>
                 <div class="fw-semibold">
@@ -241,9 +258,9 @@
 
   .admin-buyers-search {
     border: 1px solid #d9dee3;
-    border-radius: 14px;
+    border-radius: 16px;
     background: #f3f4f6;
-    padding: .9rem;
+    padding: 1rem;
   }
 
   .admin-buyers-mobile-item {
@@ -254,6 +271,10 @@
     padding: .9rem;
     margin-bottom: .75rem;
     box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
+  .admin-buyers-mobile-secondary {
+    border-left-color: #64748b;
   }
 
   .table b,
@@ -267,6 +288,15 @@
       padding: .9rem;
       border-radius: 14px;
     }
+
+    .admin-buyers-mobile-item .btn {
+      width: 100%;
+    }
+
+    .admin-buyers-mobile-item .d-flex.justify-content-between.align-items-center {
+      flex-direction: column;
+      align-items: stretch !important;
+    }
   }
 </style>
 
@@ -276,12 +306,13 @@
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const input = document.getElementById("buyerSearch");
+    const btnClear = document.getElementById("buyerClearSearch");
     const items = Array.from(document.querySelectorAll(".buyer-item"));
     const noResults = document.getElementById("buyerNoResults");
 
     if (!input) return;
 
-    input.addEventListener("input", function () {
+    function filtrarCompradores() {
       const q = input.value.trim().toLowerCase();
       let visibleCount = 0;
 
@@ -301,7 +332,17 @@
       } else {
         noResults.classList.add("d-none");
       }
-    });
+    }
+
+    input.addEventListener("input", filtrarCompradores);
+
+    if (btnClear) {
+      btnClear.addEventListener("click", function () {
+        input.value = "";
+        filtrarCompradores();
+        input.focus();
+      });
+    }
   });
 </script>
 {% endblock %}

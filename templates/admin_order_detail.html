@@ -2,6 +2,13 @@
 {% block title %}Detalle de orden #{{ orden.id }}{% endblock %}
 
 {% block content %}
+
+{% set filtro_estado = request.args.get('estado', '') %}
+{% set filtro_pago = request.args.get('pago', '') %}
+{% set filtro_q = request.args.get('q', '') %}
+{% set filtro_start = request.args.get('start', '') %}
+{% set filtro_end = request.args.get('end', '') %}
+
 <div class="card shadow-sm">
   <div class="card-body">
 
@@ -45,10 +52,27 @@
               Volver a compradores
             </a>
 
+          <!-- Viene desde reporte de ventas -->
+          {% elif from_page == "reports" %}
+            <a class="btn btn-outline-primary btn-sm"
+               href="{{ url_for('admin_report_sales', start=filtro_start, end=filtro_end, pago=filtro_pago) }}">
+              Volver al reporte
+            </a>
+
+            <a class="btn btn-outline-secondary btn-sm"
+               href="{{ url_for('admin_panel') }}">
+              Volver al panel
+            </a>
+
           <!-- Viene desde historial general -->
           {% else %}
             <a class="btn btn-outline-secondary btn-sm"
-               href="{{ url_for('admin_orders') }}">
+               href="{{ url_for('admin_orders',
+                                estado=filtro_estado,
+                                pago=filtro_pago,
+                                q=filtro_q,
+                                start=filtro_start,
+                                end=filtro_end) }}">
               Volver al historial
             </a>
           {% endif %}
@@ -138,9 +162,9 @@
     </div>
 
     <!-- =====================================================
-         TABLA DE PRODUCTOS COMPRADOS
+         TABLA DESKTOP DE PRODUCTOS COMPRADOS
          ===================================================== -->
-    <div class="table-responsive">
+    <div class="table-responsive d-none d-md-block">
       <table class="table table-bordered table-striped align-middle mb-0">
         <thead class="table-dark">
           <tr>
@@ -185,6 +209,45 @@
     </div>
 
     <!-- =====================================================
+         VISTA MÓVIL DE PRODUCTOS
+         ===================================================== -->
+    <div class="d-md-none">
+
+      {% for it in items %}
+      <div class="admin-order-product-mobile">
+
+        <div class="fw-bold">
+          {{ it.nombre }}
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <div>
+            <small class="text-muted d-block">Cantidad</small>
+            <b>{{ it.cantidad }}</b>
+          </div>
+
+          <div class="text-end">
+            <small class="text-muted d-block">Precio unitario</small>
+            <b>{{ it.precio_unitario|crc }}</b>
+          </div>
+        </div>
+
+        <div class="mt-3 text-end">
+          <small class="text-muted d-block">Subtotal</small>
+          <b>{{ it.subtotal|crc }}</b>
+        </div>
+
+      </div>
+
+      {% else %}
+      <div class="alert alert-light border text-center text-muted mb-0">
+        Esta orden no tiene productos registrados.
+      </div>
+      {% endfor %}
+
+    </div>
+
+    <!-- =====================================================
          TOTAL FINAL
          ===================================================== -->
     <div class="d-flex justify-content-end mt-3">
@@ -221,10 +284,20 @@
 
   .admin-order-buyer-box {
     border: 1px solid #d9dee3;
-    border-left: 5px solid #8cc63f;
+    border-left: 5px solid #64748b;
     border-radius: 14px;
     background: #f3f4f6;
     padding: .9rem;
+  }
+
+  .admin-order-product-mobile {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #64748b;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
   }
 
   .admin-order-total-box {
@@ -241,7 +314,8 @@
     font-weight: 700;
   }
 
-  .table b {
+  .table b,
+  .admin-order-product-mobile b {
     font-weight: 700;
   }
 
