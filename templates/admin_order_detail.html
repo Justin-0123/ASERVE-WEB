@@ -43,7 +43,11 @@
           <!-- Viene desde historial por comprador -->
           {% elif from_page == "buyer" and buyer_key %}
             <a class="btn btn-outline-primary btn-sm"
-               href="{{ url_for('admin_buyer_history', key=buyer_key, start=back_start, end=back_end) }}">
+               href="{{ url_for('admin_buyer_history',
+                 key=buyer_key,
+                 start=back_start,
+                 end=back_end,
+                 pago=filtro_pago) }}"
               Volver al comprador
             </a>
 

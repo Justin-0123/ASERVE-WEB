@@ -45,50 +45,70 @@
     </div>
 
     <!-- =====================================================
-         FILTROS POR FECHA
+         FILTROS
          ===================================================== -->
     <div class="buyer-history-filter mb-3">
-      <form class="row g-2 align-items-end"
-            method="GET"
+      <form method="GET"
             action="{{ url_for('admin_buyer_history') }}">
 
         <!-- Mantiene el comprador seleccionado -->
         <input type="hidden" name="key" value="{{ key }}">
 
-        <div class="col-6 col-md-3">
-          <label class="form-label mb-1">Desde</label>
-          <input
-            type="date"
-            name="start"
-            class="form-control form-control-sm"
-            value="{{ start }}"
-          >
+        <div class="row g-2 align-items-end">
+
+          <div class="col-6 col-md-3">
+            <label class="form-label mb-1">Desde</label>
+            <input
+              type="date"
+              name="start"
+              class="form-control form-control-sm"
+              value="{{ start }}"
+            >
+          </div>
+
+          <div class="col-6 col-md-3">
+            <label class="form-label mb-1">Hasta</label>
+            <input
+              type="date"
+              name="end"
+              class="form-control form-control-sm"
+              value="{{ end }}"
+            >
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1">Tipo de pago</label>
+            <select class="form-select form-select-sm" name="pago">
+              <option value="" {% if not pago %}selected{% endif %}>Todos</option>
+              <option value="contado" {% if pago == "contado" %}selected{% endif %}>Contado</option>
+              <option value="credito" {% if pago == "credito" or pago == "crédito" %}selected{% endif %}>Crédito</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-3 d-flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-primary btn-sm flex-fill">
+              Filtrar
+            </button>
+
+            <a class="btn btn-outline-secondary btn-sm flex-fill"
+               href="{{ url_for('admin_buyer_history', key=key) }}">
+              Limpiar
+            </a>
+          </div>
+
         </div>
 
-        <div class="col-6 col-md-3">
-          <label class="form-label mb-1">Hasta</label>
-          <input
-            type="date"
-            name="end"
-            class="form-control form-control-sm"
-            value="{{ end }}"
-          >
-        </div>
-
-        <div class="col-12 col-md-6 d-flex flex-wrap gap-2">
-          <button type="submit" class="btn btn-primary btn-sm flex-fill">
-            Filtrar
-          </button>
-
-          <a class="btn btn-outline-secondary btn-sm flex-fill"
-             href="{{ url_for('admin_buyer_history', key=key) }}">
-            Limpiar
-          </a>
-
-          <a class="btn btn-outline-success btn-sm flex-fill"
-             href="{{ url_for('admin_buyer_history_export', key=key, start=start, end=end) }}">
-            Exportar Excel
-          </a>
+        <div class="row g-2 mt-2">
+          <div class="col-12">
+            <a class="btn btn-outline-success btn-sm w-100"
+               href="{{ url_for('admin_buyer_history_export',
+                                key=key,
+                                start=start,
+                                end=end,
+                                pago=pago) }}">
+              Exportar Excel
+            </a>
+          </div>
         </div>
 
       </form>
@@ -186,7 +206,8 @@
                                   from_page='buyer',
                                   buyer_key=key,
                                   start=start,
-                                  end=end) }}">
+                                  end=end,
+                                  pago=pago) }}">
                 Ver
               </a>
             </td>
@@ -257,7 +278,8 @@
                               from_page='buyer',
                               buyer_key=key,
                               start=start,
-                              end=end) }}">
+                              end=end,
+                              pago=pago) }}">
             Ver detalle
           </a>
         </div>
@@ -277,7 +299,7 @@
     <div class="alert alert-light border mt-3 mb-0">
       <small class="text-muted">
         Por defecto se muestran las compras de los últimos 14 días.
-        Podés cambiar el rango de fechas o exportar el historial filtrado a Excel.
+        Podés cambiar el rango de fechas, tipo de pago o exportar el historial filtrado a Excel.
       </small>
     </div>
 

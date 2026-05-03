@@ -30,7 +30,9 @@
          ===================================================== -->
     <div class="admin-top-products-filter mb-3">
 
-      <form class="row g-2 align-items-end" method="GET">
+      <form class="row g-2 align-items-end"
+            method="GET"
+            action="{{ url_for('admin_report_top_products') }}">
 
         <div class="col-6 col-md-3">
           <label class="form-label mb-1">Desde</label>
@@ -116,6 +118,40 @@
     </div>
 
     <!-- =====================================================
+         BUSCADOR EN VIVO
+         ===================================================== -->
+    {% if top %}
+    <div class="admin-top-products-search mb-3">
+      <label class="form-label mb-1">Buscar producto</label>
+
+      <div class="input-group">
+        <span class="input-group-text bg-white">
+          🔎
+        </span>
+
+        <input
+          id="topProductSearch"
+          type="text"
+          class="form-control form-control-sm"
+          placeholder="Ej: Coca, galleta, bebida..."
+          autocomplete="off"
+        >
+
+        <button
+          class="btn btn-outline-secondary btn-sm"
+          type="button"
+          id="topProductClearSearch">
+          Limpiar
+        </button>
+      </div>
+
+      <small class="text-muted">
+        La búsqueda se aplica únicamente sobre los productos del ranking actual.
+      </small>
+    </div>
+    {% endif %}
+
+    <!-- =====================================================
          TABLA DESKTOP
          ===================================================== -->
     <div class="table-responsive d-none d-md-block">
@@ -131,7 +167,9 @@
 
         <tbody>
           {% for p in top %}
-          <tr>
+          <tr class="top-product-item"
+              data-search="{{ p.nombre|lower }}">
+
             <td>
               <span class="badge bg-dark">
                 {{ loop.index }}
@@ -170,7 +208,8 @@
     <div class="d-md-none">
 
       {% for p in top %}
-      <div class="admin-top-products-mobile-item">
+      <div class="admin-top-products-mobile-item top-product-item"
+           data-search="{{ p.nombre|lower }}">
 
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div>
@@ -213,6 +252,13 @@
     </div>
 
     <!-- =====================================================
+         SIN RESULTADOS DEL BUSCADOR
+         ===================================================== -->
+    <div id="topProductNoResults" class="alert alert-light border text-center mt-3 d-none">
+      No se encontraron productos con ese criterio.
+    </div>
+
+    <!-- =====================================================
          NOTA INFORMATIVA
          ===================================================== -->
     <div class="alert alert-light border mt-3 mb-0">
@@ -251,6 +297,13 @@
     height: 100%;
   }
 
+  .admin-top-products-search {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
   .admin-top-products-mobile-item {
     border: 1px solid #d9dee3;
     border-left: 5px solid #8cc63f;
@@ -268,10 +321,57 @@
 
   @media (max-width: 576px) {
     .admin-top-products-header,
-    .admin-top-products-filter {
+    .admin-top-products-filter,
+    .admin-top-products-search {
       padding: .9rem;
       border-radius: 14px;
     }
   }
 </style>
+
+<!-- =====================================================
+     JS: BUSCADOR EN VIVO
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("topProductSearch");
+    const btnClear = document.getElementById("topProductClearSearch");
+    const items = Array.from(document.querySelectorAll(".top-product-item"));
+    const noResults = document.getElementById("topProductNoResults");
+
+    if (!input) return;
+
+    function filtrarProductosTop() {
+      const q = input.value.trim().toLowerCase();
+      let visibleCount = 0;
+
+      items.forEach(function (item) {
+        const text = item.dataset.search || "";
+        const match = text.includes(q);
+
+        item.style.display = match ? "" : "none";
+
+        if (match) {
+          visibleCount += 1;
+        }
+      });
+
+      if (q && visibleCount === 0) {
+        noResults.classList.remove("d-none");
+      } else {
+        noResults.classList.add("d-none");
+      }
+    }
+
+    input.addEventListener("input", filtrarProductosTop);
+
+    if (btnClear) {
+      btnClear.addEventListener("click", function () {
+        input.value = "";
+        filtrarProductosTop();
+        input.focus();
+      });
+    }
+  });
+</script>
 {% endblock %}

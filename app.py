@@ -2306,16 +2306,17 @@ def admin_order_detail(order_id):
     # - orders
     # - credits
     # - buyer
+    # - reports
     # =====================================================
     from_page = (request.args.get("from_page") or "orders").strip()
 
     if from_page not in ("orders", "credits", "buyer", "reports"):
-    from_page = "orders"
+        from_page = "orders"
 
     # Para volver desde créditos
     back_user_id = (request.args.get("user_id") or "").strip()
 
-    # Para volver desde historial por comprador
+    # Para volver desde historial por comprador o reportes
     buyer_key = (request.args.get("buyer_key") or "").strip()
     back_start = (request.args.get("start") or "").strip()
     back_end = (request.args.get("end") or "").strip()
@@ -2379,9 +2380,10 @@ def admin_buyers():
 
 # =====================================================
 # ADMIN: HISTORIAL POR COMPRADOR
-# - Muestra las órdenes de un comprador específico
+# Ruta: /admin/buyer
+# - Muestra historial de compras de un comprador específico
 # - Filtra automáticamente últimos 14 días
-# - Permite filtrar por fechas
+# - Permite filtrar por fechas y tipo de pago
 # =====================================================
 @app.route("/admin/buyer")
 def admin_buyer_history():
@@ -2391,6 +2393,7 @@ def admin_buyer_history():
     key = (request.args.get("key") or "").strip()
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
+    pago = norm_text(request.args.get("pago"))
 
     if not key:
         flash("Comprador inválido.", "danger")
@@ -2464,6 +2467,13 @@ def admin_buyer_history():
         return redirect(url_for("admin_buyers"))
 
     # =====================================================
+    # FILTRO POR TIPO DE PAGO
+    # =====================================================
+    if pago in ("contado", "credito"):
+        where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
+        params.append(pago)
+
+    # =====================================================
     # FILTRO POR FECHAS
     # =====================================================
     where.append("date(o.fecha) >= date(?)")
@@ -2503,7 +2513,8 @@ def admin_buyer_history():
         orders=orders,
         total_rango=total_rango,
         start=start,
-        end=end
+        end=end,
+        pago=pago
     )
 
 # =====================================================
@@ -2521,6 +2532,7 @@ def admin_buyer_history_export():
     key = request.args.get("key", "").strip()
     start = request.args.get("start", "").strip()
     end = request.args.get("end", "").strip()
+    pago = norm_text(request.args.get("pago"))
 
     if not key:
         flash("Comprador inválido para exportar.", "danger")
@@ -2590,6 +2602,12 @@ def admin_buyer_history_export():
     else:
         flash("Comprador inválido para exportar.", "danger")
         return redirect(url_for("admin_buyers"))
+    # =====================================================
+    # FILTRO POR TIPO DE PAGO
+    # =====================================================
+    if pago in ("contado", "credito"):
+        where.append("replace(lower(trim(o.tipo_pago)), 'é', 'e') = ?")
+        params.append(pago)
 
     # =====================================================
     # FILTRO DE FECHAS
@@ -2688,6 +2706,8 @@ def admin_buyer_history_export():
 
     ws["A7"] = "Hasta"
     ws["B7"] = end
+    ws["A8"] = "Tipo de pago"
+    ws["B8"] = "Todos" if not pago else ("Crédito" if pago == "credito" else "Contado")
 
     ws["A9"] = "Resumen"
     ws["A9"].font = font_bold

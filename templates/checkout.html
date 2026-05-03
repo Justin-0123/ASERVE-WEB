@@ -17,17 +17,19 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Finalizar compra</h4>
-        <small class="text-muted">
-          Revisá el resumen y seleccioná el método de pago
-        </small>
-      </div>
+    <div class="checkout-header mb-3">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h4 class="mb-0">Finalizar compra</h4>
+          <small class="text-muted">
+            Revisá el resumen y seleccioná el método de pago
+          </small>
+        </div>
 
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('ver_carrito') }}">
-        Volver al carrito
-      </a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('ver_carrito') }}">
+          Volver al carrito
+        </a>
+      </div>
     </div>
 
     <div class="row g-3">
@@ -58,7 +60,10 @@
           </div>
         </div>
 
-        <div class="card shadow-sm">
+        <!-- =====================================================
+             TABLA DESKTOP
+             ===================================================== -->
+        <div class="card shadow-sm d-none d-md-block">
           <div class="card-body p-2">
 
             <div class="table-responsive">
@@ -108,6 +113,45 @@
           </div>
         </div>
 
+        <!-- =====================================================
+             VISTA MÓVIL: PRODUCTOS EN CARDS
+             ===================================================== -->
+        <div class="d-md-none">
+
+          {% for it in items %}
+          <div class="checkout-mobile-item">
+
+            <div class="fw-bold">
+              {{ it.nombre }}
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <div>
+                <small class="text-muted d-block">Cantidad</small>
+                <b>{{ it.cantidad }}</b>
+              </div>
+
+              <div class="text-end">
+                <small class="text-muted d-block">Precio unitario</small>
+                <b>{{ it.precio|crc }}</b>
+              </div>
+            </div>
+
+            <div class="mt-3 text-end">
+              <small class="text-muted d-block">Subtotal</small>
+              <b>{{ it.subtotal|crc }}</b>
+            </div>
+
+          </div>
+
+          {% else %}
+          <div class="alert alert-light border text-center text-muted mb-0">
+            No hay productos en el carrito.
+          </div>
+          {% endfor %}
+
+        </div>
+
         <!-- Total final -->
         <div class="checkout-total-box mt-3">
           <div>
@@ -129,81 +173,84 @@
            ===================================================== -->
       <div class="col-12 col-md-5">
 
-        <div class="card shadow-sm">
-          <div class="card-body">
+        <div class="checkout-payment-box">
 
-            <h6 class="mb-3">Método de pago</h6>
-
-            <form method="POST" id="checkoutForm">
-
-              <!-- Protección CSRF -->
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-              <!-- Token interno para evitar doble envío de compra -->
-              <input type="hidden" name="checkout_token" value="{{ checkout_token }}">
-
-              <!-- =====================================================
-                   NOMBRE PARA NO ASOCIADOS
-                   ===================================================== -->
-              {% if es_no_asociado %}
-              <div class="mb-3">
-                <label class="form-label">Nombre</label>
-                <input
-                  class="form-control"
-                  name="nombre_no_asociado"
-                  required
-                  autocomplete="name"
-                  placeholder="Nombre del comprador"
-                >
-                <div class="form-text">
-                  Necesario para registrar la compra de no asociados.
-                </div>
-              </div>
-              {% endif %}
-
-              <!-- =====================================================
-                   TIPO DE PAGO
-                   ===================================================== -->
-              <div class="mb-3">
-                <label class="form-label">Tipo de pago</label>
-
-                {% if can_credit %}
-                  <select class="form-select" name="tipo_pago" required>
-                    <option value="contado">Contado</option>
-                    <option value="credito">Crédito</option>
-                  </select>
-
-                  <div class="form-text">
-                    Seleccioná el método de pago para finalizar la compra.
-                  </div>
-                {% else %}
-                  <select class="form-select" name="tipo_pago" required>
-                    <option value="contado">Contado</option>
-                  </select>
-
-                  <div class="form-text">
-                    Compra disponible únicamente de contado.
-                  </div>
-                {% endif %}
-              </div>
-
-              <!-- =====================================================
-                   CONFIRMAR COMPRA
-                   ===================================================== -->
-              <div class="checkout-confirm-box mb-3">
-                <small class="text-muted">Total de la compra</small>
-                <div class="fw-bold fs-5">
-                  {{ total|crc }}
-                </div>
-              </div>
-
-              <button class="btn btn-success w-100" type="submit" id="btnConfirmarCompra">
-                Confirmar compra
-              </button>
-
-            </form>
-
+          <div class="mb-3">
+            <h6 class="mb-1">Método de pago</h6>
+            <small class="text-muted">
+              Confirmá cómo se registrará esta compra.
+            </small>
           </div>
+
+          <form method="POST" id="checkoutForm">
+
+            <!-- Protección CSRF -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <!-- Token interno para evitar doble envío de compra -->
+            <input type="hidden" name="checkout_token" value="{{ checkout_token }}">
+
+            <!-- =====================================================
+                 NOMBRE PARA NO ASOCIADOS
+                 ===================================================== -->
+            {% if es_no_asociado %}
+            <div class="mb-3">
+              <label class="form-label">Nombre</label>
+              <input
+                class="form-control"
+                name="nombre_no_asociado"
+                required
+                autocomplete="name"
+                placeholder="Nombre del comprador"
+              >
+              <div class="form-text">
+                Necesario para registrar la compra de no asociados.
+              </div>
+            </div>
+            {% endif %}
+
+            <!-- =====================================================
+                 TIPO DE PAGO
+                 ===================================================== -->
+            <div class="mb-3">
+              <label class="form-label">Tipo de pago</label>
+
+              {% if can_credit %}
+                <select class="form-select" name="tipo_pago" required>
+                  <option value="contado">Contado</option>
+                  <option value="credito">Crédito</option>
+                </select>
+
+                <div class="form-text">
+                  Seleccioná el método de pago para finalizar la compra.
+                </div>
+              {% else %}
+                <select class="form-select" name="tipo_pago" required>
+                  <option value="contado">Contado</option>
+                </select>
+
+                <div class="form-text">
+                  Compra disponible únicamente de contado.
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- =====================================================
+                 CONFIRMAR COMPRA
+                 ===================================================== -->
+            <div class="checkout-confirm-box mb-3">
+              <small class="text-muted">Total de la compra</small>
+              <div class="fw-bold fs-5">
+                {{ total|crc }}
+              </div>
+            </div>
+
+            <button class="btn btn-success w-100" type="submit" id="btnConfirmarCompra">
+              Confirmar compra
+            </button>
+
+          </form>
+
         </div>
 
       </div>
@@ -217,11 +264,30 @@
      ESTILOS DEL CHECKOUT
      ===================================================== -->
 <style>
+  .checkout-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
   .checkout-summary-box {
     border: 1px solid #d9dee3;
     border-radius: 12px;
     background: #ffffff;
     padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .checkout-mobile-item {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #64748b;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
   }
 
   .checkout-total-box {
@@ -243,14 +309,34 @@
     line-height: 1.15;
   }
 
+  .checkout-payment-box {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
   .checkout-confirm-box {
     border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
     border-radius: 12px;
     background: #f3f4f6;
     padding: .85rem;
   }
 
+  .table b,
+  .checkout-mobile-item b {
+    font-weight: 700;
+  }
+
   @media (max-width: 576px) {
+    .checkout-header,
+    .checkout-payment-box {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
     .checkout-total-box {
       flex-direction: column;
       align-items: stretch;
