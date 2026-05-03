@@ -2079,9 +2079,9 @@ def admin_orders_export():
     for row_num in range(7, 11):
         ws.cell(row=row_num, column=1).font = font_bold
 
-    ws["B8"].number_format = '"₡"#,##0.00'
-    ws["B9"].number_format = '"₡"#,##0.00'
-    ws["B10"].number_format = '"₡"#,##0.00'
+    ws["B8"].number_format = '"₡"#,##0'
+    ws["B9"].number_format = '"₡"#,##0'
+    ws["B10"].number_format = '"₡"#,##0'
 
     # Tabla de órdenes
     start_row = 12
@@ -2120,7 +2120,7 @@ def admin_orders_export():
             cell.border = thin_border
             cell.alignment = alignment_left
 
-        ws.cell(row=current_row, column=7).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=7).number_format = '"₡"#,##0'
 
         current_row += 1
 
@@ -2200,9 +2200,9 @@ def admin_orders_export():
             cell.border = thin_border
             cell.alignment = alignment_left
 
-        ws2.cell(row=current_row, column=7).number_format = '"₡"#,##0.00'
-        ws2.cell(row=current_row, column=10).number_format = '"₡"#,##0.00'
-        ws2.cell(row=current_row, column=11).number_format = '"₡"#,##0.00'
+        ws2.cell(row=current_row, column=7).number_format = '"₡"#,##0'
+        ws2.cell(row=current_row, column=10).number_format = '"₡"#,##0'
+        ws2.cell(row=current_row, column=11).number_format = '"₡"#,##0'
 
         current_row += 1
 
@@ -2698,7 +2698,7 @@ def admin_buyer_history_export():
 
     ws["A11"] = "Total acumulado"
     ws["B11"] = float(resumen["total_acumulado"])
-    ws["B11"].number_format = '"₡"#,##0.00'
+    ws["B11"].number_format = '"₡"#,##0'
 
     for row in ws.iter_rows(min_row=3, max_row=11, min_col=1, max_col=2):
         for cell in row:
@@ -2755,9 +2755,9 @@ def admin_buyer_history_export():
             cell.border = thin_border
             cell.alignment = alignment_left
 
-        ws.cell(row=current_row, column=7).number_format = '"₡"#,##0.00'
-        ws.cell(row=current_row, column=10).number_format = '"₡"#,##0.00'
-        ws.cell(row=current_row, column=11).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=7).number_format = '"₡"#,##0'
+        ws.cell(row=current_row, column=10).number_format = '"₡"#,##0'
+        ws.cell(row=current_row, column=11).number_format = '"₡"#,##0'
 
         current_row += 1
 
@@ -3583,9 +3583,9 @@ def admin_report_sales_export():
     for row_num in range(6, 10):
         ws.cell(row=row_num, column=1).font = font_bold
 
-    ws["B7"].number_format = '"₡"#,##0.00'
-    ws["B8"].number_format = '"₡"#,##0.00'
-    ws["B9"].number_format = '"₡"#,##0.00'
+    ws["B7"].number_format = '"₡"#,##0'
+    ws["B8"].number_format = '"₡"#,##0'
+    ws["B9"].number_format = '"₡"#,##0'
 
     start_row = 11
     headers = ["Orden", "Fecha", "Comprador", "Pago", "Estado", "Total"]
@@ -3613,7 +3613,7 @@ def admin_report_sales_export():
             cell.border = thin_border
             cell.alignment = alignment_left
 
-        ws.cell(row=current_row, column=6).number_format = '"₡"#,##0.00'
+        ws.cell(row=current_row, column=6).number_format = '"₡"#,##0'
         current_row += 1
 
     if not orders:
