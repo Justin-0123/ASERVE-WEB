@@ -974,16 +974,17 @@ def admin_audit_logs():
     db = get_db()
 
     # Asegura que la tabla audit_logs exista
-    # Si ya tenés esta función creada, dejala.
     ensure_app_schema(db)
 
     accion = (request.args.get("accion") or "").strip()
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
-    ver_detalle = (request.args.get("ver_detalle") or "").strip() == "1"
+    ver_detalle = (request.args.get("ver_detalle") or "0").strip() == "1"
 
     # =====================================================
     # DEFAULT: últimos 14 días
+    # Si no se envían fechas desde el filtro, se cargan
+    # automáticamente desde hace 13 días hasta hoy.
     # =====================================================
     hoy = datetime.now().date()
     hace_14 = hoy - timedelta(days=13)
@@ -1042,7 +1043,9 @@ def admin_audit_logs():
 
     ultima = db.execute(
         f"""
-        SELECT fecha, accion
+        SELECT
+            fecha,
+            accion
         FROM audit_logs
         {where_sql}
         ORDER BY fecha DESC, id DESC
@@ -1064,7 +1067,7 @@ def admin_audit_logs():
         "ultima_fecha": ultima_fecha,
         "ultima_accion": ultima_accion_nombre
     }
-    
+
     # =====================================================
     # RESUMEN POR ACCIÓN
     # =====================================================
@@ -1116,100 +1119,6 @@ def admin_audit_logs():
         resumen_general=resumen_general,
         resumen_acciones=resumen_acciones,
         logs=logs
-    )
-
-    # =====================================================
-    # DEFAULT: últimos 14 días
-    # Si no se envían fechas desde el filtro, se cargan
-    # automáticamente desde hace 13 días hasta hoy.
-    # =====================================================
-    hoy = datetime.now().date()
-    hace_14 = hoy - timedelta(days=13)
-
-    if not start:
-        start = hace_14.strftime("%Y-%m-%d")
-
-    if not end:
-        end = hoy.strftime("%Y-%m-%d")
-
-    where = []
-    params = []
-
-    if accion:
-        where.append("accion = ?")
-        params.append(accion)
-
-    # Siempre se aplica el rango de fechas
-    where.append("date(fecha) >= date(?)")
-    params.append(start)
-
-    where.append("date(fecha) <= date(?)")
-    params.append(end)
-
-    where_sql = "WHERE " + " AND ".join(where)
-
-    # Lista de acciones disponibles para el filtro
-    acciones_disponibles = db.execute(
-        """
-        SELECT DISTINCT accion
-        FROM audit_logs
-        ORDER BY accion ASC
-        """
-    ).fetchall()
-
-    # Resumen agrupado por acción
-    resumen_acciones = db.execute(
-        f"""
-        SELECT
-            accion,
-            COUNT(*) AS cantidad,
-            MAX(fecha) AS ultima_fecha
-        FROM audit_logs
-        {where_sql}
-        GROUP BY accion
-        ORDER BY cantidad DESC, accion ASC
-        """,
-        params
-    ).fetchall()
-
-    # Totales generales del rango/filtro
-    resumen_general = db.execute(
-        f"""
-        SELECT
-            COUNT(*) AS total_acciones,
-            COUNT(DISTINCT accion) AS tipos_acciones,
-            MAX(fecha) AS ultima_accion
-        FROM audit_logs
-        {where_sql}
-        """,
-        params
-    ).fetchone()
-
-    # Detalle individual, solo si se activa
-    logs = []
-
-    if ver_detalle or accion:
-        logs = db.execute(
-            f"""
-            SELECT id, fecha, admin_nombre, accion, detalle
-            FROM audit_logs
-            {where_sql}
-            ORDER BY id DESC
-            LIMIT 300
-            """,
-            params
-        ).fetchall()
-
-    return render_template(
-        "admin_audit_logs.html",
-        logs=logs,
-        resumen_acciones=resumen_acciones,
-        resumen_general=resumen_general,
-        acciones_disponibles=acciones_disponibles,
-        accion=accion,
-        start=start,
-        end=end,
-        ver_detalle=ver_detalle
     )
 
 # =====================================================
