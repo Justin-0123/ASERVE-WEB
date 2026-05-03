@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Catálogo{% endblock %}
+{% block title %}Catálogo - ASERVE{% endblock %}
 
 {% block content %}
 <div class="card shadow-sm card-compact">
@@ -29,6 +29,10 @@
         <label class="form-label mb-1">Buscar producto</label>
 
         <div class="input-group">
+          <span class="input-group-text bg-white">
+            🔎
+          </span>
+
           <input
             id="searchFront"
             type="text"
@@ -44,10 +48,6 @@
             Limpiar
           </button>
         </div>
-
-        <small class="text-muted">
-          La búsqueda se aplica únicamente sobre los productos disponibles.
-        </small>
       </div>
     {% endif %}
 
@@ -59,24 +59,23 @@
       <div class="row g-3" id="productsContainer">
 
         {% for p in productos %}
-        <div class="col-12 col-sm-6 col-md-4 product-item"
+        <div class="col-12 col-sm-6 col-lg-4 product-item"
              data-name="{{ p.nombre|lower }}">
 
-          <div class="card shadow-sm h-100">
+          <div class="card product-card h-100">
 
             <!-- Imagen del producto -->
             {% if p.image_filename %}
-              <div class="bg-white text-center p-2 border-bottom">
+              <div class="product-img-box">
                 <img
                   src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
-                  class="img-fluid"
+                  class="product-img"
                   alt="{{ p.nombre }}"
-                  style="max-height: 180px; object-fit: contain;"
                 >
               </div>
             {% else %}
-              <div class="bg-light text-center p-4 border-bottom text-muted">
-                Sin imagen
+              <div class="product-img-box product-img-empty">
+                <span>Sin imagen</span>
               </div>
             {% endif %}
 
@@ -93,7 +92,7 @@
               </small>
 
               <!-- Precio -->
-              <div class="fw-bold fs-6 mb-3">
+              <div class="product-price mb-3">
                 ₡{{ "%.2f"|format(p.precio) }}
               </div>
 
@@ -146,6 +145,61 @@
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS DEL CATÁLOGO
+     ===================================================== -->
+<style>
+  .product-card {
+    border: 1px solid #d9dee3;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+
+  .product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 .55rem 1.15rem rgba(16, 24, 40, .10) !important;
+  }
+
+  .product-img-box {
+    height: 210px;
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: .75rem;
+  }
+
+  .product-img {
+    max-height: 190px;
+    max-width: 100%;
+    object-fit: contain;
+  }
+
+  .product-img-empty {
+    background: #f7f8fa;
+    color: #667085;
+    font-weight: 600;
+  }
+
+  .product-price {
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: #111827;
+  }
+
+  @media (max-width: 576px) {
+    .product-img-box {
+      height: 180px;
+    }
+
+    .product-img {
+      max-height: 160px;
+    }
+  }
+</style>
 
 <!-- =====================================================
      JS: BÚSQUEDA EN VIVO

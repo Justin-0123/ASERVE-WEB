@@ -27,59 +27,212 @@
        ESTILOS GENERALES ASERVE
        ===================================================== -->
   <style>
+    :root {
+      --aserve-navy: #07145f;
+      --aserve-blue-dark: #101828;
+      --aserve-green: #8cc63f;
+      --aserve-green-dark: #6aa72f;
+      --aserve-bg: #f4f6f8;
+      --aserve-card: #ffffff;
+      --aserve-border: #d9dee3;
+      --aserve-text: #111827;
+      --aserve-muted: #667085;
+    }
+
     body {
       min-height: 100vh;
+      background: var(--aserve-bg);
+      color: var(--aserve-text);
     }
 
     .aserve-container {
-      max-width: 980px;
+      max-width: 1040px;
       margin: 0 auto;
-      padding-left: 12px;
-      padding-right: 12px;
+      padding-left: 14px;
+      padding-right: 14px;
     }
 
     /* =====================================================
-       LOGO / MARCA
+       NAVBAR / MARCA
        ===================================================== */
+    .aserve-navbar {
+      background: linear-gradient(90deg, #1f2328 0%, #151b22 100%);
+      border-bottom: 4px solid rgba(140, 198, 63, .85);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .12);
+    }
+
     .navbar-brand {
       letter-spacing: .3px;
       text-decoration: none;
     }
 
     .aserve-logo-box {
-      width: 54px;
-      height: 54px;
+      width: 56px;
+      height: 56px;
       background: #ffffff;
-      border-radius: 10px;
+      border-radius: 14px;
       overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, .18);
     }
 
     .aserve-logo-img {
-      width: 65px;
-      height: 65px;
+      width: 67px;
+      height: 67px;
       object-fit: contain;
-      transform: none;
     }
 
     .aserve-brand-text {
       color: #ffffff;
-      font-size: 1.35rem;
-      font-weight: 700;
-      letter-spacing: .4px;
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: .5px;
       line-height: 1;
     }
 
     .navbar-actions {
-      gap: .5rem;
+      gap: .55rem;
+    }
+
+    .navbar-actions .btn {
+      border-radius: 9px;
+      font-weight: 600;
+      padding: .35rem .75rem;
+      transition: all .15s ease-in-out;
+    }
+
+    .navbar-actions .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-outline-warning {
+      color: #ffd43b;
+      border-color: #ffd43b;
+    }
+
+    .btn-outline-warning:hover {
+      color: #1f2328;
+      background-color: #ffd43b;
+      border-color: #ffd43b;
     }
 
     /* =====================================================
-       TABLAS / CARDS / BOTONES
+       CONTENIDO GENERAL
        ===================================================== */
+    main.aserve-container {
+      padding-top: 2rem !important;
+      padding-bottom: 2rem !important;
+    }
+
+    .card {
+      border: 1px solid var(--aserve-border);
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(16, 24, 40, .06) !important;
+    }
+
+    .card-body {
+      padding: 1.35rem;
+    }
+
+    .card-compact .card-body {
+      padding: 1.1rem;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      color: var(--aserve-text);
+      font-weight: 750;
+    }
+
+    .text-muted {
+      color: var(--aserve-muted) !important;
+    }
+
+    /* =====================================================
+       BOTONES
+       ===================================================== */
+    .btn {
+      border-radius: 9px;
+      font-weight: 600;
+    }
+
+    .btn-primary {
+      background-color: #146ef5;
+      border-color: #146ef5;
+    }
+
+    .btn-primary:hover {
+      background-color: #0f5fd4;
+      border-color: #0f5fd4;
+    }
+
+    .btn-success {
+      background-color: #198754;
+      border-color: #198754;
+    }
+
+    .btn-outline-success {
+      color: #198754;
+      border-color: #198754;
+    }
+
+    .btn-outline-success:hover {
+      background-color: #198754;
+      border-color: #198754;
+      color: #ffffff;
+    }
+
+    .btn-sm {
+      padding: .28rem .65rem;
+      font-size: .9rem;
+      line-height: 1.25;
+    }
+
+    /* =====================================================
+       FORMULARIOS
+       ===================================================== */
+    .form-control,
+    .form-select {
+      border-radius: 9px;
+      border-color: var(--aserve-border);
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+      border-color: var(--aserve-green);
+      box-shadow: 0 0 0 .18rem rgba(140, 198, 63, .22);
+    }
+
+    .form-label {
+      font-weight: 600;
+      color: #344054;
+    }
+
+    /* =====================================================
+       TABLAS
+       ===================================================== */
+    .table {
+      border-color: var(--aserve-border);
+    }
+
+    .table thead.table-dark th {
+      background-color: #1f2328 !important;
+      color: #ffffff;
+      border-color: #444b53;
+      font-weight: 700;
+    }
+
+    .table td,
+    .table th {
+      vertical-align: middle;
+    }
+
+    .table-striped > tbody > tr:nth-of-type(odd) > * {
+      background-color: rgba(16, 24, 40, .035);
+    }
+
     .table-compact th,
     .table-compact td {
       padding: .45rem .6rem;
@@ -87,23 +240,61 @@
       vertical-align: middle;
     }
 
-    .card-compact .card-body {
-      padding: 1rem;
-    }
-
-    .btn-sm {
-      padding: .25rem .6rem;
-      font-size: .9rem;
-      line-height: 1.2;
+    /* =====================================================
+       BADGES / ALERTAS
+       ===================================================== */
+    .badge {
+      border-radius: 8px;
+      font-weight: 700;
+      padding: .38em .6em;
     }
 
     .alert {
-      border-radius: .45rem;
+      border-radius: 12px;
+      border-color: var(--aserve-border);
+    }
+
+    .alert-success {
+      background-color: #e7f6ee;
+      color: #0f5132;
+      border-color: #b7e4c7;
+    }
+
+    .alert-danger {
+      background-color: #fdecec;
+      color: #842029;
+      border-color: #f5c2c7;
+    }
+
+    .alert-warning {
+      background-color: #fff7df;
+      color: #664d03;
+      border-color: #ffec99;
+    }
+
+    .alert-info {
+      background-color: #eaf4ff;
+      color: #055160;
+      border-color: #b6e0fe;
     }
 
     /* =====================================================
-       RESPONSIVE MÓVIL
+       RESPONSIVE
        ===================================================== */
+    @media (max-width: 768px) {
+      .aserve-container {
+        max-width: 100%;
+      }
+
+      main.aserve-container {
+        padding-top: 1.2rem !important;
+      }
+
+      .card-body {
+        padding: 1rem;
+      }
+    }
+
     @media (max-width: 576px) {
       .aserve-container {
         padding-left: 10px;
@@ -112,7 +303,7 @@
 
       .navbar .aserve-container {
         align-items: flex-start !important;
-        gap: .6rem;
+        gap: .7rem;
       }
 
       .navbar-actions {
@@ -120,36 +311,44 @@
         justify-content: flex-start !important;
       }
 
+      .navbar-actions .btn {
+        padding: .32rem .55rem;
+        font-size: .85rem;
+      }
+
       .aserve-logo-box {
-        width: 46px;
-        height: 46px;
-        border-radius: 9px;
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
       }
 
       .aserve-logo-img {
-        width: 40px;
-        height: 40px;
-        transform: none;
+        width: 58px;
+        height: 58px;
       }
 
       .aserve-brand-text {
-        font-size: 1.15rem;
+        font-size: 1.22rem;
       }
 
       .btn-sm {
         padding: .25rem .5rem;
-        font-size: .85rem;
+        font-size: .84rem;
+      }
+
+      .table {
+        font-size: .92rem;
       }
     }
   </style>
 </head>
 
-<body class="bg-light">
+<body>
 
   <!-- =====================================================
        NAVBAR PRINCIPAL
        ===================================================== -->
-  <nav class="navbar navbar-dark bg-dark">
+  <nav class="navbar navbar-dark aserve-navbar">
     <div class="container-fluid aserve-container d-flex flex-wrap justify-content-between align-items-center">
 
       <!-- Logo / Inicio -->
@@ -173,38 +372,32 @@
       <!-- Acciones superiores -->
       <div class="d-flex flex-wrap navbar-actions justify-content-end">
 
-        <!-- Carrito -->
         <a href="{{ url_for('ver_carrito') }}" class="btn btn-outline-light btn-sm">
           Carrito
         </a>
 
         {% if session.get("user_id") %}
 
-          <!-- Perfil -->
           <a href="{{ url_for('perfil') }}" class="btn btn-outline-light btn-sm">
             Perfil
           </a>
 
-          <!-- Mis compras -->
           <a href="{{ url_for('mis_compras') }}" class="btn btn-outline-light btn-sm">
             Mis compras
           </a>
 
-          <!-- Panel Admin -->
           {% if session.get("rol") == "admin" %}
             <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-warning btn-sm">
               Admin
             </a>
           {% endif %}
 
-          <!-- Salir -->
           <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">
             Salir
           </a>
 
         {% else %}
 
-          <!-- Login -->
           <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-sm">
             Login
           </a>
