@@ -2309,8 +2309,8 @@ def admin_order_detail(order_id):
     # =====================================================
     from_page = (request.args.get("from_page") or "orders").strip()
 
-    if from_page not in ("orders", "credits", "buyer"):
-        from_page = "orders"
+    if from_page not in ("orders", "credits", "buyer", "reports"):
+    from_page = "orders"
 
     # Para volver desde créditos
     back_user_id = (request.args.get("user_id") or "").strip()
