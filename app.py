@@ -43,6 +43,17 @@ app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
     raise RuntimeError("Falta configurar SECRET_KEY en el archivo .env o variables de entorno.")
 
+# =====================================================
+# FILTRO JINJA: FORMATO MONEDA COLONES SIN DECIMALES
+# Uso en HTML: {{ monto|crc }}
+# Ejemplo: 825.0 -> ₡825
+# =====================================================
+@app.template_filter("crc")
+def format_crc(value):
+    try:
+        return f"₡{float(value):,.0f}"
+    except (TypeError, ValueError):
+        return "₡0"
 
 # =====================================================
 # PROTECCIÓN CSRF

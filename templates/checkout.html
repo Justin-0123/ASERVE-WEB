@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Checkout{% endblock %}
+{% block title %}Finalizar compra - ASERVE{% endblock %}
 
 {% block content %}
 <!-- =====================================================
@@ -8,142 +8,264 @@
      - Selección de método de pago
      - Protección CSRF
      - Token interno para evitar doble compra
+     - Formato moneda sin decimales usando |crc
      ===================================================== -->
 
-<h4 class="mb-3">Finalizar compra</h4>
+<div class="card shadow-sm">
+  <div class="card-body">
 
-<div class="row g-3">
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+      <div>
+        <h4 class="mb-0">Finalizar compra</h4>
+        <small class="text-muted">
+          Revisá el resumen y seleccioná el método de pago
+        </small>
+      </div>
 
-  <!-- =====================================================
-       RESUMEN DEL CARRITO
-       ===================================================== -->
-  <div class="col-md-7">
-    <div class="card shadow-sm">
-      <div class="card-body p-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('ver_carrito') }}">
+        Volver al carrito
+      </a>
+    </div>
 
-        <div class="table-responsive">
-          <table class="table table-bordered align-middle mb-0">
-            <thead class="table-dark">
-              <tr>
-                <th>Producto</th>
-                <th style="width:110px;">Cant.</th>
-                <th style="width:140px;">Subtotal</th>
-              </tr>
-            </thead>
+    <div class="row g-3">
 
-            <tbody>
-              {% for it in items %}
-              <tr>
-                <td>{{ it.nombre }}</td>
-                <td>{{ it.cantidad }}</td>
-                <td>₡{{ "%.2f"|format(it.subtotal) }}</td>
-              </tr>
-              {% else %}
-              <tr>
-                <td colspan="3" class="text-center text-muted">
-                  No hay productos en el carrito.
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+      <!-- =====================================================
+           RESUMEN DEL CARRITO
+           ===================================================== -->
+      <div class="col-12 col-md-7">
+
+        <!-- Resumen superior -->
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="checkout-summary-box">
+              <small class="text-muted">Productos</small>
+              <div class="fw-bold">
+                {{ items|length }}
+              </div>
+            </div>
+          </div>
+
+          <div class="col-6">
+            <div class="checkout-summary-box">
+              <small class="text-muted">Total</small>
+              <div class="fw-bold">
+                {{ total|crc }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-body p-2">
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped align-middle mb-0">
+                <thead class="table-dark">
+                  <tr>
+                    <th>Producto</th>
+                    <th style="width:110px;">Cant.</th>
+                    <th style="width:140px;">Subtotal</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for it in items %}
+                  <tr>
+                    <td>
+                      <div class="fw-semibold">
+                        {{ it.nombre }}
+                      </div>
+
+                      <small class="text-muted">
+                        Precio unitario: {{ it.precio|crc }}
+                      </small>
+                    </td>
+
+                    <td>
+                      {{ it.cantidad }}
+                    </td>
+
+                    <td>
+                      <b>{{ it.subtotal|crc }}</b>
+                    </td>
+                  </tr>
+
+                  {% else %}
+                  <tr>
+                    <td colspan="3" class="text-center text-muted py-4">
+                      No hay productos en el carrito.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Total final -->
+        <div class="checkout-total-box mt-3">
+          <div>
+            <small class="text-muted">Total a pagar</small>
+            <div class="checkout-total-amount">
+              {{ total|crc }}
+            </div>
+          </div>
+
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('catalogo') }}">
+            Seguir comprando
+          </a>
         </div>
 
       </div>
-    </div>
 
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mt-3">
-      <a class="btn btn-outline-primary" href="{{ url_for('ver_carrito') }}">
-        Volver al carrito
-      </a>
+      <!-- =====================================================
+           FORMULARIO DE PAGO
+           ===================================================== -->
+      <div class="col-12 col-md-5">
 
-      <div class="fs-5">
-        Total:
-        <b>₡{{ "%.2f"|format(total) }}</b>
-      </div>
-    </div>
-  </div>
+        <div class="card shadow-sm">
+          <div class="card-body">
 
-  <!-- =====================================================
-       FORMULARIO DE PAGO
-       ===================================================== -->
-  <div class="col-md-5">
-    <div class="card shadow-sm">
-      <div class="card-body">
+            <h6 class="mb-3">Método de pago</h6>
 
-        <h6 class="mb-3">Método de pago</h6>
+            <form method="POST" id="checkoutForm">
 
-        <form method="POST" id="checkoutForm">
+              <!-- Protección CSRF -->
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-          <!-- Protección CSRF -->
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <!-- Token interno para evitar doble envío de compra -->
+              <input type="hidden" name="checkout_token" value="{{ checkout_token }}">
 
-          <!-- Token interno para evitar doble envío de compra -->
-          <input type="hidden" name="checkout_token" value="{{ checkout_token }}">
-
-          <!-- =====================================================
-               NOMBRE PARA NO ASOCIADOS
-               ===================================================== -->
-          {% if es_no_asociado %}
-          <div class="mb-3">
-            <label class="form-label">Nombre (no asociado)</label>
-            <input
-              class="form-control"
-              name="nombre_no_asociado"
-              required
-              autocomplete="name"
-            >
-            <div class="form-text">
-              Necesario para registrar la compra de no asociados.
-            </div>
-          </div>
-          {% endif %}
-
-          <!-- =====================================================
-               TIPO DE PAGO
-               - Asociado/Admin: contado o crédito
-               - No asociado: solo contado
-               ===================================================== -->
-          <div class="mb-3">
-            <label class="form-label">Tipo de pago</label>
-
-            {% if can_credit %}
-              <select class="form-select" name="tipo_pago" required>
-                <option value="contado">Contado</option>
-                <option value="credito">Crédito</option>
-              </select>
-              <div class="form-text">
-                Seleccioná el método de pago para finalizar la compra.
+              <!-- =====================================================
+                   NOMBRE PARA NO ASOCIADOS
+                   ===================================================== -->
+              {% if es_no_asociado %}
+              <div class="mb-3">
+                <label class="form-label">Nombre</label>
+                <input
+                  class="form-control"
+                  name="nombre_no_asociado"
+                  required
+                  autocomplete="name"
+                  placeholder="Nombre del comprador"
+                >
+                <div class="form-text">
+                  Necesario para registrar la compra de no asociados.
+                </div>
               </div>
-            {% else %}
-              <select class="form-select" name="tipo_pago" required>
-                <option value="contado">Contado</option>
-              </select>
-              <div class="form-text">
-                Compra disponible únicamente de contado.
-              </div>
-            {% endif %}
-          </div>
+              {% endif %}
 
-          <!-- =====================================================
-               BOTÓN CONFIRMAR
-               ===================================================== -->
-          <button class="btn btn-success w-100" type="submit" id="btnConfirmarCompra">
-            Confirmar compra
-          </button>
-          
-        </form>
+              <!-- =====================================================
+                   TIPO DE PAGO
+                   ===================================================== -->
+              <div class="mb-3">
+                <label class="form-label">Tipo de pago</label>
+
+                {% if can_credit %}
+                  <select class="form-select" name="tipo_pago" required>
+                    <option value="contado">Contado</option>
+                    <option value="credito">Crédito</option>
+                  </select>
+
+                  <div class="form-text">
+                    Seleccioná el método de pago para finalizar la compra.
+                  </div>
+                {% else %}
+                  <select class="form-select" name="tipo_pago" required>
+                    <option value="contado">Contado</option>
+                  </select>
+
+                  <div class="form-text">
+                    Compra disponible únicamente de contado.
+                  </div>
+                {% endif %}
+              </div>
+
+              <!-- =====================================================
+                   CONFIRMAR COMPRA
+                   ===================================================== -->
+              <div class="checkout-confirm-box mb-3">
+                <small class="text-muted">Total de la compra</small>
+                <div class="fw-bold fs-5">
+                  {{ total|crc }}
+                </div>
+              </div>
+
+              <button class="btn btn-success w-100" type="submit" id="btnConfirmarCompra">
+                Confirmar compra
+              </button>
+
+            </form>
+
+          </div>
+        </div>
 
       </div>
-    </div>
-  </div>
 
+    </div>
+
+  </div>
 </div>
 
 <!-- =====================================================
-     JS SIMPLE
-     Evita que el usuario presione varias veces el botón
-     mientras se procesa la compra.
+     ESTILOS DEL CHECKOUT
+     ===================================================== -->
+<style>
+  .checkout-summary-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+  }
+
+  .checkout-total-box {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .checkout-total-amount {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.15;
+  }
+
+  .checkout-confirm-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #f3f4f6;
+    padding: .85rem;
+  }
+
+  @media (max-width: 576px) {
+    .checkout-total-box {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .checkout-total-box .btn {
+      width: 100%;
+    }
+  }
+</style>
+
+<!-- =====================================================
+     JS
+     - Evita doble clic al confirmar compra
+     - Recarga si el usuario vuelve atrás desde caché
      ===================================================== -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {
@@ -158,12 +280,6 @@
     }
   });
 
-  // =====================================================
-  // Si el usuario vuelve atrás después de confirmar compra,
-  // el navegador puede restaurar la página desde caché.
-  // Esto fuerza recarga para evitar que quede el botón
-  // pegado en "Procesando compra...".
-  // =====================================================
   window.addEventListener("pageshow", function (event) {
     if (event.persisted) {
       window.location.reload();

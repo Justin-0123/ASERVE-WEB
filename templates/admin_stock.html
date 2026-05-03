@@ -8,44 +8,48 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h5 class="mb-0">Stock de productos</h5>
-        <small class="text-muted">
-          Control de existencias y alertas de stock mínimo
-        </small>
+    <div class="admin-stock-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h5 class="mb-0">Stock de productos</h5>
+          <small class="text-muted">
+            Control de existencias y alertas de stock mínimo
+          </small>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+
+          <a class="btn btn-outline-secondary btn-sm"
+             href="{{ url_for('admin_panel') }}">
+            Volver
+          </a>
+
+          <a class="btn btn-outline-dark btn-sm"
+             href="{{ url_for('admin_products') }}">
+            Gestionar productos
+          </a>
+
+          <a class="btn btn-primary btn-sm"
+             href="{{ url_for('admin_product_add') }}">
+            + Nuevo producto
+          </a>
+
+          {% if only_low %}
+            <a class="btn btn-outline-primary btn-sm"
+               href="{{ url_for('admin_stock') }}">
+              Ver todos
+            </a>
+          {% else %}
+            <a class="btn btn-outline-danger btn-sm"
+               href="{{ url_for('admin_stock', only_low=1) }}">
+              Solo bajos
+            </a>
+          {% endif %}
+
+        </div>
       </div>
 
-      <div class="d-flex flex-wrap gap-2">
-
-        <a class="btn btn-outline-secondary btn-sm"
-           href="{{ url_for('admin_panel') }}">
-          Volver
-        </a>
-
-        <a class="btn btn-outline-dark btn-sm"
-           href="{{ url_for('admin_products') }}">
-          Gestionar productos
-        </a>
-
-        <a class="btn btn-primary btn-sm"
-           href="{{ url_for('admin_product_add') }}">
-          + Nuevo producto
-        </a>
-
-        {% if only_low %}
-          <a class="btn btn-outline-primary btn-sm"
-             href="{{ url_for('admin_stock') }}">
-            Ver todos
-          </a>
-        {% else %}
-          <a class="btn btn-outline-danger btn-sm"
-             href="{{ url_for('admin_stock', only_low=1) }}">
-            Solo bajos
-          </a>
-        {% endif %}
-
-      </div>
     </div>
 
     <!-- =====================================================
@@ -54,7 +58,7 @@
     <div class="row g-2 mb-3">
 
       <div class="col-12 col-md-4">
-        <div class="border rounded p-2 bg-white">
+        <div class="admin-stock-summary-box">
           <small class="text-muted">Productos mostrados</small>
           <div class="fw-bold">
             {{ productos|length }}
@@ -63,7 +67,7 @@
       </div>
 
       <div class="col-12 col-md-4">
-        <div class="border rounded p-2 bg-white">
+        <div class="admin-stock-summary-box">
           <small class="text-muted">Productos con stock bajo</small>
           <div class="fw-bold">
             {{ bajos_count }}
@@ -72,7 +76,7 @@
       </div>
 
       <div class="col-12 col-md-4">
-        <div class="border rounded p-2 bg-white">
+        <div class="admin-stock-summary-box">
           <small class="text-muted">Vista actual</small>
           <div class="fw-bold">
             {% if only_low %}
@@ -89,8 +93,9 @@
     <!-- =====================================================
          BUSCADOR EN VIVO
          ===================================================== -->
-    <div class="mb-3">
+    <div class="admin-stock-search mb-3">
       <label class="form-label mb-1">Buscar producto</label>
+
       <input
         id="stockSearch"
         type="text"
@@ -98,15 +103,16 @@
         placeholder="Ej: nombre del producto"
         autocomplete="off"
       >
+
       <small class="text-muted">
         Podés buscar rápidamente dentro del listado mostrado.
       </small>
     </div>
 
     <!-- =====================================================
-         TABLA DE STOCK
+         TABLA DESKTOP
          ===================================================== -->
-    <div class="table-responsive">
+    <div class="table-responsive d-none d-md-block">
       <table class="table table-sm table-bordered table-striped align-middle mb-0">
         <thead class="table-dark">
           <tr>
@@ -183,6 +189,77 @@
     </div>
 
     <!-- =====================================================
+         VISTA MÓVIL
+         ===================================================== -->
+    <div class="d-md-none">
+
+      {% for p in productos %}
+      {% set bajo = (p.activo == 1 and p.stock_minimo|int > 0 and p.stock|int <= p.stock_minimo|int) %}
+
+      <div
+        class="admin-stock-mobile-item {% if bajo %}admin-stock-mobile-warning{% endif %} stock-item"
+        data-search="{{ p.nombre|lower }}">
+
+        <div class="d-flex justify-content-between align-items-start gap-2">
+
+          <div>
+            <div class="fw-bold">
+              {{ p.nombre }}
+            </div>
+
+            {% if p.activo != 1 %}
+              <small class="text-muted">Producto inactivo</small>
+            {% else %}
+              <small class="text-muted">Producto activo</small>
+            {% endif %}
+          </div>
+
+          <div>
+            {% if p.activo == 1 %}
+              {% if bajo %}
+                <span class="badge bg-danger">Bajo</span>
+              {% else %}
+                <span class="badge bg-success">OK</span>
+              {% endif %}
+            {% else %}
+              <span class="badge bg-secondary">Inactivo</span>
+            {% endif %}
+          </div>
+
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+
+          <div>
+            <small class="text-muted d-block">Stock actual</small>
+            <b>{{ p.stock }}</b>
+          </div>
+
+          <div class="text-end">
+            <small class="text-muted d-block">Stock mínimo</small>
+            <b>{{ p.stock_minimo }}</b>
+          </div>
+
+        </div>
+
+        <div class="mt-3">
+          <a class="btn btn-outline-primary btn-sm w-100"
+             href="{{ url_for('admin_product_edit', product_id=p.id) }}">
+            Editar producto
+          </a>
+        </div>
+
+      </div>
+
+      {% else %}
+      <div class="alert alert-light border text-center text-muted mb-0">
+        No hay productos registrados.
+      </div>
+      {% endfor %}
+
+    </div>
+
+    <!-- =====================================================
          SIN RESULTADOS DEL BUSCADOR
          ===================================================== -->
     <div id="stockNoResults" class="alert alert-light border text-center mt-3 d-none">
@@ -201,6 +278,61 @@
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS STOCK ADMIN
+     ===================================================== -->
+<style>
+  .admin-stock-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .admin-stock-summary-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .admin-stock-search {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .admin-stock-mobile-item {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
+  .admin-stock-mobile-warning {
+    border-left-color: #ffc107;
+  }
+
+  .table b,
+  .admin-stock-mobile-item b {
+    font-weight: 700;
+  }
+
+  @media (max-width: 576px) {
+    .admin-stock-header,
+    .admin-stock-search {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+  }
+</style>
 
 <!-- =====================================================
      JS: BUSCADOR EN VIVO

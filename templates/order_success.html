@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Compra realizada{% endblock %}
+{% block title %}Compra realizada - ASERVE{% endblock %}
 
 {% block content %}
 <div class="card shadow-sm">
@@ -8,29 +8,37 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <div class="d-flex align-items-center gap-2">
-          <h4 class="mb-0">Compra realizada</h4>
-          <span class="badge bg-success">✓</span>
+    <div class="success-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+
+        <div class="d-flex align-items-center gap-3">
+          <div class="success-icon">
+            ✓
+          </div>
+
+          <div>
+            <h4 class="mb-0">Compra realizada</h4>
+            <small class="text-muted">
+              Tu orden fue registrada correctamente
+            </small>
+          </div>
         </div>
 
-        <small class="text-muted">
-          Tu orden fue registrada correctamente
-        </small>
-      </div>
+        <div class="d-flex flex-wrap gap-2">
+          {% if session.get("user_id") %}
+            <a href="{{ url_for('mis_compras') }}" class="btn btn-outline-primary btn-sm">
+              Ver mis compras
+            </a>
+          {% endif %}
 
-      <div class="d-flex flex-wrap gap-2">
-        {% if session.get("user_id") %}
-          <a href="{{ url_for('mis_compras') }}" class="btn btn-outline-primary btn-sm">
-            Ver mis compras
+          <a href="{{ url_for('catalogo') }}" class="btn btn-outline-secondary btn-sm">
+            Volver al catálogo
           </a>
-        {% endif %}
+        </div>
 
-        <a href="{{ url_for('catalogo') }}" class="btn btn-outline-secondary btn-sm">
-          Volver al catálogo
-        </a>
       </div>
+
     </div>
 
     <!-- =====================================================
@@ -39,7 +47,7 @@
     <div class="row g-2 mb-3">
 
       <div class="col-12 col-md-3">
-        <div class="border rounded p-2 bg-white h-100">
+        <div class="success-info-box">
           <small class="text-muted">Orden</small>
           <div class="fw-bold">
             #{{ orden["id"] }}
@@ -48,7 +56,7 @@
       </div>
 
       <div class="col-12 col-md-3">
-        <div class="border rounded p-2 bg-white h-100">
+        <div class="success-info-box">
           <small class="text-muted">Fecha</small>
           <div class="fw-bold">
             {{ orden["fecha"] }}
@@ -57,7 +65,7 @@
       </div>
 
       <div class="col-12 col-md-3">
-        <div class="border rounded p-2 bg-white h-100">
+        <div class="success-info-box">
           <small class="text-muted">Pago</small>
           <div class="fw-bold">
             {% set pago_norm = orden["tipo_pago"]|string|lower|replace('é','e')|trim %}
@@ -72,7 +80,7 @@
       </div>
 
       <div class="col-12 col-md-3">
-        <div class="border rounded p-2 bg-white h-100">
+        <div class="success-info-box">
           <small class="text-muted">Comprador</small>
           <div class="fw-bold">
             {{ comprador }}
@@ -110,11 +118,11 @@
             </td>
 
             <td>
-              ₡{{ "%.2f"|format(it["precio_unitario"]) }}
+              {{ it["precio_unitario"]|crc }}
             </td>
 
             <td>
-              <strong>₡{{ "%.2f"|format(it["subtotal"]) }}</strong>
+              <strong>{{ it["subtotal"]|crc }}</strong>
             </td>
           </tr>
 
@@ -132,13 +140,20 @@
     <!-- =====================================================
          TOTAL FACTURA
          ===================================================== -->
-    <div class="d-flex justify-content-end mt-3">
-      <div class="border rounded p-3 bg-white text-end" style="min-width: 260px;">
+    <div class="success-total-box mt-3">
+
+      <div>
         <small class="text-muted">Total de la compra</small>
-        <h5 class="mb-0">
-          <strong>₡{{ "%.2f"|format(orden["total"]) }}</strong>
-        </h5>
+        <div class="success-total-amount">
+          {{ orden["total"]|crc }}
+        </div>
       </div>
+
+      <div class="text-md-end">
+        <small class="text-muted d-block">Referencia</small>
+        <b>#{{ orden["id"] }}</b>
+      </div>
+
     </div>
 
     <!-- =====================================================
@@ -152,4 +167,73 @@
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS COMPRA REALIZADA
+     ===================================================== -->
+<style>
+  .success-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .success-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: #e7f6ee;
+    color: #198754;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    font-size: 1.2rem;
+    border: 1px solid #b7e4c7;
+    flex: 0 0 auto;
+  }
+
+  .success-info-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .success-total-box {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .success-total-amount {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.15;
+  }
+
+  .table strong {
+    font-weight: 700;
+  }
+
+  @media (max-width: 576px) {
+    .success-total-box {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .success-total-box .text-md-end {
+      text-align: left !important;
+    }
+  }
+</style>
 {% endblock %}

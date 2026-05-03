@@ -8,29 +8,35 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h5 class="mb-0">Mi perfil</h5>
-        <small class="text-muted">
-          Gestioná tu cuenta y consultá tus compras
-        </small>
+    <div class="perfil-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+
+        <div>
+          <h5 class="mb-0">Mi perfil</h5>
+          <small class="text-muted">
+            Gestioná tu cuenta y consultá tus compras
+          </small>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('mis_compras') }}">
+            Ver mis compras
+          </a>
+
+          {% if session.get("rol") == "admin" %}
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">
+              Ir al panel admin
+            </a>
+          {% else %}
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('catalogo') }}">
+              Volver al catálogo
+            </a>
+          {% endif %}
+        </div>
+
       </div>
 
-      <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('mis_compras') }}">
-          Ver mis compras
-        </a>
-
-        {% if session.get("rol") == "admin" %}
-          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_panel') }}">
-            Ir al panel admin
-          </a>
-        {% else %}
-          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('catalogo') }}">
-            Volver al catálogo
-          </a>
-        {% endif %}
-      </div>
     </div>
 
     <!-- =====================================================
@@ -39,7 +45,7 @@
     <div class="row g-2 mb-3">
 
       <div class="col-12 col-md-6">
-        <div class="border rounded p-2 bg-white h-100">
+        <div class="perfil-info-box">
           <small class="text-muted">Nombre</small>
           <div class="fw-bold">
             {{ user.nombre }}
@@ -48,7 +54,7 @@
       </div>
 
       <div class="col-6 col-md-3">
-        <div class="border rounded p-2 bg-white h-100">
+        <div class="perfil-info-box">
           <small class="text-muted">Usuario</small>
           <div class="fw-bold">
             {{ user.usuario }}
@@ -57,7 +63,7 @@
       </div>
 
       <div class="col-6 col-md-3">
-        <div class="border rounded p-2 bg-white h-100">
+        <div class="perfil-info-box">
           <small class="text-muted">Rol</small>
           <div class="fw-bold">
             {% if user.rol == "admin" %}
@@ -71,93 +77,136 @@
 
     </div>
 
-    <hr>
-
     <!-- =====================================================
          CAMBIAR CONTRASEÑA
          ===================================================== -->
-    <div class="mb-3">
-      <h6 class="mb-1">Cambiar contraseña</h6>
-      <small class="text-muted">
-        Para actualizar tu contraseña, primero ingresá tu contraseña actual.
-      </small>
-    </div>
+    <div class="password-section mt-4">
 
-    <div class="alert alert-light border">
-      <small class="text-muted">
-        La nueva contraseña debe tener mínimo 8 caracteres, una letra mayúscula,
-        una letra minúscula y un número.
-      </small>
-    </div>
-
-    <form method="POST" action="{{ url_for('perfil') }}" id="perfilPasswordForm">
-
-      <!-- Token CSRF -->
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-      <div class="row g-3">
-
-        <div class="col-12 col-md-4">
-          <label class="form-label">Contraseña actual</label>
-          <input
-            class="form-control form-control-sm"
-            type="password"
-            name="password_actual"
-            required
-            autocomplete="current-password"
-          >
-        </div>
-
-        <div class="col-12 col-md-4">
-          <label class="form-label">Nueva contraseña</label>
-          <input
-            class="form-control form-control-sm"
-            type="password"
-            name="password_nueva"
-            id="perfilPasswordNueva"
-            required
-            minlength="8"
-            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
-            title="Debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número."
-            autocomplete="new-password"
-          >
-          <small class="text-muted">
-            Mínimo una mayúscula, una minúscula y un número.
-          </small>
-        </div>
-
-        <div class="col-12 col-md-4">
-          <label class="form-label">Confirmar nueva contraseña</label>
-          <input
-            class="form-control form-control-sm"
-            type="password"
-            name="password_confirmar"
-            id="perfilPasswordConfirmar"
-            required
-            minlength="8"
-            autocomplete="new-password"
-          >
-          <small id="perfilPasswordHelp" class="text-muted">
-            Debe coincidir con la nueva contraseña.
-          </small>
-        </div>
-
+      <div class="mb-3">
+        <h6 class="mb-1">Cambiar contraseña</h6>
+        <small class="text-muted">
+          Para actualizar tu contraseña, primero ingresá tu contraseña actual.
+        </small>
       </div>
 
-      <div class="d-flex flex-wrap gap-2 mt-4">
-        <button class="btn btn-success btn-sm" type="submit">
-          Guardar nueva contraseña
-        </button>
-
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('catalogo') }}">
-          Cancelar
-        </a>
+      <div class="alert alert-light border">
+        <small class="text-muted">
+          La nueva contraseña debe tener mínimo 8 caracteres, una letra mayúscula,
+          una letra minúscula y un número.
+        </small>
       </div>
 
-    </form>
+      <form method="POST" action="{{ url_for('perfil') }}" id="perfilPasswordForm">
+
+        <!-- Token CSRF -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="row g-3">
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Contraseña actual</label>
+            <input
+              class="form-control form-control-sm"
+              type="password"
+              name="password_actual"
+              required
+              autocomplete="current-password"
+            >
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Nueva contraseña</label>
+            <input
+              class="form-control form-control-sm"
+              type="password"
+              name="password_nueva"
+              id="perfilPasswordNueva"
+              required
+              minlength="8"
+              pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
+              title="Debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número."
+              autocomplete="new-password"
+            >
+            <small class="text-muted">
+              Mínimo una mayúscula, una minúscula y un número.
+            </small>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Confirmar nueva contraseña</label>
+            <input
+              class="form-control form-control-sm"
+              type="password"
+              name="password_confirmar"
+              id="perfilPasswordConfirmar"
+              required
+              minlength="8"
+              autocomplete="new-password"
+            >
+            <small id="perfilPasswordHelp" class="text-muted">
+              Debe coincidir con la nueva contraseña.
+            </small>
+          </div>
+
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-4">
+          <button class="btn btn-success btn-sm" type="submit">
+            Guardar nueva contraseña
+          </button>
+
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('catalogo') }}">
+            Cancelar
+          </a>
+        </div>
+
+      </form>
+
+    </div>
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS PERFIL
+     ===================================================== -->
+<style>
+  .perfil-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .perfil-info-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .password-section {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .password-section .alert {
+    background: #ffffff;
+  }
+
+  @media (max-width: 576px) {
+    .perfil-header,
+    .password-section {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+  }
+</style>
 
 <!-- =====================================================
      VALIDACIÓN CLIENTE: CONTRASEÑAS IGUALES

@@ -8,24 +8,26 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Catálogo de productos</h4>
-        <small class="text-muted">
-          Productos disponibles para compra
-        </small>
-      </div>
+    <div class="catalog-header mb-3">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h4 class="mb-0">Catálogo de productos</h4>
+          <small class="text-muted">
+            Productos disponibles para compra
+          </small>
+        </div>
 
-      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('ver_carrito') }}">
-        Ver carrito
-      </a>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('ver_carrito') }}">
+          Ver carrito
+        </a>
+      </div>
     </div>
 
     <!-- =====================================================
          BUSCADOR EN VIVO
          ===================================================== -->
     {% if productos %}
-      <div class="mb-3">
+      <div class="catalog-search mb-3">
         <label class="form-label mb-1">Buscar producto</label>
 
         <div class="input-group">
@@ -93,7 +95,7 @@
 
               <!-- Precio -->
               <div class="product-price mb-3">
-                ₡{{ "%.2f"|format(p.precio) }}
+                {{ p.precio|crc }}
               </div>
 
               <!-- Agregar al carrito -->
@@ -126,8 +128,11 @@
       <!-- =====================================================
            SIN PRODUCTOS DISPONIBLES
            ===================================================== -->
-      <div class="alert alert-light border text-center mb-0">
+      <div class="catalog-empty text-center">
+        <div class="catalog-empty-icon">📦</div>
+
         <h6 class="mb-1">No hay productos disponibles en este momento</h6>
+
         <div class="text-muted">
           Los productos aparecerán aquí cuando estén activos y tengan stock disponible.
         </div>
@@ -150,15 +155,31 @@
      ESTILOS DEL CATÁLOGO
      ===================================================== -->
 <style>
+  .catalog-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .catalog-search {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
   .product-card {
     border: 1px solid #d9dee3;
     border-radius: 14px;
     overflow: hidden;
-    transition: transform .12s ease, box-shadow .12s ease;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
   }
 
   .product-card:hover {
     transform: translateY(-2px);
+    border-color: rgba(140, 198, 63, .65);
     box-shadow: 0 .55rem 1.15rem rgba(16, 24, 40, .10) !important;
   }
 
@@ -185,12 +206,37 @@
   }
 
   .product-price {
-    font-weight: 800;
+    font-weight: 700;
     font-size: 1.05rem;
     color: #111827;
   }
 
+  .catalog-empty {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 2rem 1rem;
+  }
+
+  .catalog-empty-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    background: #f3f8ea;
+    display: grid;
+    place-items: center;
+    margin: 0 auto .75rem auto;
+    font-size: 24px;
+  }
+
   @media (max-width: 576px) {
+    .catalog-header,
+    .catalog-search {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
     .product-img-box {
       height: 180px;
     }

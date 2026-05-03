@@ -2,73 +2,240 @@
 {% block title %}Iniciar sesión - ASERVE{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-12 col-md-6 col-lg-5">
+<div class="login-page-wrap">
+  <div class="login-card-custom">
 
-    <div class="card shadow-sm">
-      <div class="card-body p-4">
-
-        <!-- =====================================================
-             ENCABEZADO
-             ===================================================== -->
-        <div class="text-center mb-4">
-          <h4 class="mb-1">Iniciar sesión</h4>
-          <small class="text-muted">
-            Accedé con tu Código de Colaborador y contraseña.
-          </small>
-        </div>
-
-        <!-- =====================================================
-             FORMULARIO LOGIN
-             ===================================================== -->
-        <form method="POST" action="{{ url_for('login') }}">
-
-          <!-- Token CSRF -->
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-          <div class="mb-3">
-            <label class="form-label">Usuario</label>
-            <input
-              class="form-control"
-              type="text"
-              name="usuario"
-              placeholder="Código de Colaborador"
-              required
-              autocomplete="username"
-              autofocus
-            >
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Contraseña</label>
-            <input
-              class="form-control"
-              type="password"
-              name="contrasena"
-              placeholder="Ingresá tu contraseña"
-              required
-              autocomplete="current-password"
-            >
-          </div>
-
-          <button class="btn btn-primary w-100" type="submit">
-            Entrar
-          </button>
-
-        </form>
-
-        <!-- =====================================================
-             MENSAJE INFORMATIVO
-             ===================================================== -->
-        <div class="alert alert-light border mt-3 mb-0">
-          <small class="text-muted">
-            Si olvidaste tu contraseña o tu usuario está bloqueado, solicitá ayuda al administrador.
-          </small>
-        </div>
-
+    <!-- =====================================================
+         ICONO SUPERIOR
+         ===================================================== -->
+    <div class="text-center mb-3">
+      <div class="login-top-icon">
+        🔐
       </div>
+    </div>
+
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="text-center mb-4">
+      <h4 class="mb-1">Iniciar sesión</h4>
+      <small class="text-muted d-block login-subtitle">
+        Accedé con tu Código de Colaborador y contraseña.
+      </small>
+    </div>
+
+    <!-- =====================================================
+         FORMULARIO LOGIN
+         ===================================================== -->
+    <form method="POST" action="{{ url_for('login') }}">
+
+      <!-- Token CSRF -->
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <!-- Usuario -->
+      <div class="mb-3">
+        <label class="form-label">Usuario</label>
+
+        <div class="login-input-wrap">
+          <span class="login-input-icon">
+            👤
+          </span>
+
+          <input
+            class="form-control login-input"
+            type="text"
+            name="usuario"
+            placeholder="Código de Colaborador"
+            required
+            autocomplete="username"
+            autofocus
+          >
+        </div>
+      </div>
+
+      <!-- Contraseña -->
+      <div class="mb-3">
+        <label class="form-label">Contraseña</label>
+
+        <div class="login-input-wrap">
+          <span class="login-input-icon">
+            🔒
+          </span>
+
+          <input
+            class="form-control login-input login-password-input"
+            type="password"
+            name="contrasena"
+            id="loginPassword"
+            placeholder="Ingresá tu contraseña"
+            required
+            autocomplete="current-password"
+          >
+
+          <button
+            type="button"
+            class="login-toggle-password"
+            id="togglePassword"
+            aria-label="Mostrar u ocultar contraseña">
+            👁
+          </button>
+        </div>
+      </div>
+
+      <!-- Botón -->
+      <button class="btn login-btn-submit w-100" type="submit">
+        Entrar
+      </button>
+
+    </form>
+
+    <!-- =====================================================
+         MENSAJE INFORMATIVO
+         ===================================================== -->
+    <div class="login-help-text mt-4">
+      Si olvidaste tu contraseña o tu usuario está bloqueado,
+      solicitá ayuda al administrador.
     </div>
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS LOGIN
+     ===================================================== -->
+<style>
+  .login-page-wrap {
+    max-width: 360px;
+    margin: 0 auto;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .login-card-custom {
+    background: #ffffff;
+    border: 1px solid #a8bf74;
+    border-radius: 18px;
+    padding: 1.5rem 1.2rem;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.10);
+  }
+
+  .login-top-icon {
+    width: 54px;
+    height: 54px;
+    margin: 0 auto;
+    border-radius: 14px;
+    background: #f3f4f6;
+    border: 1px solid #e3e6ea;
+    display: grid;
+    place-items: center;
+    font-size: 1.4rem;
+  }
+
+  .login-subtitle {
+    max-width: 250px;
+    margin: 0 auto;
+    line-height: 1.4;
+  }
+
+  .login-input-wrap {
+    position: relative;
+  }
+
+  .login-input {
+    height: 42px;
+    border-radius: 8px;
+    border: 1px solid #d8dde3;
+    padding-left: 2.3rem;
+    padding-right: 2.5rem;
+    background: #ffffff;
+    font-size: .95rem;
+  }
+
+  .login-input:focus {
+    border-color: #8cc63f;
+    box-shadow: 0 0 0 0.15rem rgba(140, 198, 63, 0.15);
+  }
+
+  .login-input-icon {
+    position: absolute;
+    top: 50%;
+    left: .75rem;
+    transform: translateY(-50%);
+    font-size: .95rem;
+    opacity: .55;
+    pointer-events: none;
+  }
+
+  .login-toggle-password {
+    position: absolute;
+    top: 50%;
+    right: .65rem;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: .95rem;
+    opacity: .55;
+    line-height: 1;
+  }
+
+  .login-toggle-password:hover {
+    opacity: .8;
+  }
+
+  .login-btn-submit {
+    border: none;
+    border-radius: 999px;
+    padding: .7rem 1rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: linear-gradient(180deg, #2f80ff 0%, #1f6fe5 100%);
+    box-shadow: 0 5px 12px rgba(47, 128, 255, 0.30);
+  }
+
+  .login-btn-submit:hover {
+    color: #ffffff;
+    background: linear-gradient(180deg, #2a78f0 0%, #1d67d2 100%);
+  }
+
+  .login-help-text {
+    font-size: .85rem;
+    color: #6c757d;
+    line-height: 1.45;
+    text-align: left;
+  }
+
+  @media (max-width: 576px) {
+    .login-page-wrap {
+      max-width: 100%;
+      padding-top: .5rem;
+    }
+
+    .login-card-custom {
+      padding: 1.25rem 1rem;
+    }
+  }
+</style>
+
+<!-- =====================================================
+     JS: MOSTRAR / OCULTAR CONTRASEÑA
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const passwordInput = document.getElementById("loginPassword");
+    const toggleBtn = document.getElementById("togglePassword");
+
+    if (passwordInput && toggleBtn) {
+      toggleBtn.addEventListener("click", function () {
+        if (passwordInput.type === "password") {
+          passwordInput.type = "text";
+          toggleBtn.textContent = "🙈";
+        } else {
+          passwordInput.type = "password";
+          toggleBtn.textContent = "👁";
+        }
+      });
+    }
+  });
+</script>
 {% endblock %}

@@ -8,45 +8,109 @@
     <!-- =====================================================
          ENCABEZADO DEL MÓDULO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Gestión de Productos</h4>
-        <small class="text-muted">
-          Administra productos, precios, stock, imágenes y estado
-        </small>
+    <div class="admin-products-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h4 class="mb-0">Gestión de productos</h4>
+          <small class="text-muted">
+            Administra productos, precios, stock, imágenes y estado
+          </small>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-secondary btn-sm">
+            Volver
+          </a>
+
+          <a href="{{ url_for('admin_product_add') }}" class="btn btn-primary btn-sm">
+            + Nuevo producto
+          </a>
+        </div>
       </div>
 
-      <div class="d-flex flex-wrap gap-2">
-        <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-secondary btn-sm">
-          Volver
-        </a>
+    </div>
 
-        <a href="{{ url_for('admin_product_add') }}" class="btn btn-primary btn-sm">
-          + Nuevo producto
-        </a>
+    <!-- =====================================================
+         RESUMEN RÁPIDO
+         ===================================================== -->
+    <div class="row g-2 mb-3">
+
+      <div class="col-12 col-md-4">
+        <div class="admin-products-summary-box">
+          <small class="text-muted">Productos registrados</small>
+          <div class="fw-bold">
+            {{ productos|length }}
+          </div>
+        </div>
       </div>
+
+      <div class="col-12 col-md-4">
+        <div class="admin-products-summary-box">
+          <small class="text-muted">Productos con alerta</small>
+          <div class="fw-bold">
+            {{ bajos|length }}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="admin-products-summary-box">
+          <small class="text-muted">Gestión</small>
+          <div class="fw-bold">
+            Inventario y catálogo
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- =====================================================
          ALERTA DE STOCK BAJO
          ===================================================== -->
     {% if bajos and bajos|length > 0 %}
-      <div class="alert alert-danger">
-        <b>Alerta de stock:</b>
-        Hay {{ bajos|length }} producto(s) que requieren reposición:
+      <div class="admin-products-alert mb-3">
+        <div class="fw-semibold mb-1">
+          Alerta de stock
+        </div>
 
-        {% for b in bajos %}
-          <span class="badge bg-light text-dark">
-            {{ b.nombre }} ({{ b.stock }})
-          </span>
-        {% endfor %}
+        <small class="text-muted d-block mb-2">
+          Hay {{ bajos|length }} producto(s) que requieren revisión.
+        </small>
+
+        <div class="d-flex flex-wrap gap-1">
+          {% for b in bajos %}
+            <span class="badge bg-light text-dark border">
+              {{ b.nombre }} ({{ b.stock }})
+            </span>
+          {% endfor %}
+        </div>
       </div>
     {% endif %}
 
     <!-- =====================================================
-         TABLA DE PRODUCTOS
+         BUSCADOR EN VIVO
          ===================================================== -->
-    <div class="table-responsive">
+    <div class="admin-products-search mb-3">
+      <label class="form-label mb-1">Buscar producto</label>
+
+      <input
+        id="productSearch"
+        type="text"
+        class="form-control form-control-sm"
+        placeholder="Ej: nombre, estado o alerta"
+        autocomplete="off"
+      >
+
+      <small class="text-muted">
+        Podés buscar por nombre, estado, activo, inactivo, bajo stock u OK.
+      </small>
+    </div>
+
+    <!-- =====================================================
+         TABLA DESKTOP
+         ===================================================== -->
+    <div class="table-responsive d-none d-md-block">
       <table class="table table-bordered table-striped align-middle mb-0">
         <thead class="table-dark">
           <tr>
@@ -64,12 +128,18 @@
 
         <tbody>
           {% for p in productos %}
+          {% set bajo = (p.activo == 1 and p.stock_minimo > 0 and p.stock <= p.stock_minimo) %}
+          {% set estado_texto = "activo" if p.activo == 1 else "inactivo" %}
+          {% set alerta_texto = "bajo stock" if bajo else "ok" %}
 
-          <!-- Fila resaltada si el producto está bajo stock -->
-          <tr class="{% if p.activo == 1 and p.stock_minimo > 0 and p.stock <= p.stock_minimo %}table-warning{% endif %}">
+          <tr
+            class="{% if bajo %}table-warning{% endif %} product-admin-item"
+            data-search="{{ p.nombre|lower }} {{ estado_texto }} {{ alerta_texto }}">
 
             <!-- ID -->
-            <td>{{ p.id }}</td>
+            <td>
+              <b>#{{ p.id }}</b>
+            </td>
 
             <!-- Imagen -->
             <td>
@@ -77,28 +147,40 @@
                 <img
                   src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
                   alt="Imagen de {{ p.nombre }}"
-                  style="width: 70px; height: 70px; object-fit: contain; border-radius: 8px; border: 1px solid #ddd; background: #fff;"
+                  class="admin-product-img"
                 >
               {% else %}
-                <span class="text-muted small">Sin imagen</span>
+                <div class="admin-product-empty-img">
+                  <span>Sin imagen</span>
+                </div>
               {% endif %}
             </td>
 
             <!-- Nombre -->
-            <td>{{ p.nombre }}</td>
+            <td>
+              <div class="fw-semibold">
+                {{ p.nombre }}
+              </div>
+            </td>
 
             <!-- Precio -->
-            <td>₡{{ "%.2f"|format(p.precio) }}</td>
+            <td>
+              {{ p.precio|crc }}
+            </td>
 
             <!-- Stock -->
-            <td>{{ p.stock }}</td>
+            <td>
+              <b>{{ p.stock }}</b>
+            </td>
 
             <!-- Stock mínimo -->
-            <td>{{ p.stock_minimo }}</td>
+            <td>
+              {{ p.stock_minimo }}
+            </td>
 
             <!-- Alerta -->
             <td>
-              {% if p.activo == 1 and p.stock_minimo > 0 and p.stock <= p.stock_minimo %}
+              {% if bajo %}
                 <span class="badge bg-danger">Bajo stock</span>
               {% else %}
                 <span class="badge bg-success">OK</span>
@@ -142,13 +224,131 @@
 
           {% else %}
           <tr>
-            <td colspan="9" class="text-center text-muted">
+            <td colspan="9" class="text-center text-muted py-4">
               No hay productos registrados.
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <!-- =====================================================
+         VISTA MÓVIL
+         ===================================================== -->
+    <div class="d-md-none">
+
+      {% for p in productos %}
+      {% set bajo = (p.activo == 1 and p.stock_minimo > 0 and p.stock <= p.stock_minimo) %}
+      {% set estado_texto = "activo" if p.activo == 1 else "inactivo" %}
+      {% set alerta_texto = "bajo stock" if bajo else "ok" %}
+
+      <div
+        class="admin-product-mobile-item {% if bajo %}admin-product-mobile-warning{% endif %} product-admin-item"
+        data-search="{{ p.nombre|lower }} {{ estado_texto }} {{ alerta_texto }}">
+
+        <div class="d-flex gap-3 align-items-start">
+
+          {% if p.image_filename %}
+            <img
+              src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
+              alt="Imagen de {{ p.nombre }}"
+              class="admin-product-img"
+            >
+          {% else %}
+            <div class="admin-product-empty-img">
+              <span>Sin imagen</span>
+            </div>
+          {% endif %}
+
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <div class="fw-bold">
+                  {{ p.nombre }}
+                </div>
+
+                <small class="text-muted">
+                  ID #{{ p.id }}
+                </small>
+              </div>
+
+              <div class="text-end">
+                {% if p.activo == 1 %}
+                  <span class="badge bg-primary">Activo</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inactivo</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="mt-2">
+              {% if bajo %}
+                <span class="badge bg-danger">Bajo stock</span>
+              {% else %}
+                <span class="badge bg-success">OK</span>
+              {% endif %}
+            </div>
+          </div>
+
+        </div>
+
+        <div class="row g-2 mt-3">
+
+          <div class="col-4">
+            <small class="text-muted d-block">Precio</small>
+            <b>{{ p.precio|crc }}</b>
+          </div>
+
+          <div class="col-4">
+            <small class="text-muted d-block">Stock</small>
+            <b>{{ p.stock }}</b>
+          </div>
+
+          <div class="col-4 text-end">
+            <small class="text-muted d-block">Mínimo</small>
+            <b>{{ p.stock_minimo }}</b>
+          </div>
+
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-3">
+
+          <a class="btn btn-outline-primary btn-sm flex-fill"
+             href="{{ url_for('admin_product_edit', product_id=p.id) }}">
+            Editar
+          </a>
+
+          <form
+            method="POST"
+            action="{{ url_for('admin_product_delete', product_id=p.id) }}"
+            class="flex-fill"
+            onsubmit="return confirm('¿Seguro que deseas eliminar este producto? Solo se eliminará si no tiene historial de ventas o movimientos.');">
+
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+              Eliminar
+            </button>
+          </form>
+
+        </div>
+
+      </div>
+
+      {% else %}
+      <div class="alert alert-light border text-center text-muted mb-0">
+        No hay productos registrados.
+      </div>
+      {% endfor %}
+
+    </div>
+
+    <!-- =====================================================
+         SIN RESULTADOS DEL BUSCADOR
+         ===================================================== -->
+    <div id="productNoResults" class="alert alert-light border text-center mt-3 d-none">
+      No se encontraron productos con ese criterio.
     </div>
 
     <!-- =====================================================
@@ -163,4 +363,128 @@
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS PRODUCTOS ADMIN
+     ===================================================== -->
+<style>
+  .admin-products-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .admin-products-summary-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .admin-products-alert {
+    border: 1px solid #f0d98c;
+    border-left: 5px solid #ffc107;
+    border-radius: 14px;
+    background: #fff8e1;
+    padding: .9rem;
+  }
+
+  .admin-products-search {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .admin-product-img,
+  .admin-product-empty-img {
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
+    border: 1px solid #d9dee3;
+    background: #ffffff;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+
+  .admin-product-empty-img {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: .75rem;
+    text-align: center;
+    padding: .25rem;
+  }
+
+  .admin-product-mobile-item {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
+  .admin-product-mobile-warning {
+    border-left-color: #ffc107;
+  }
+
+  .table b,
+  .admin-product-mobile-item b {
+    font-weight: 700;
+  }
+
+  @media (max-width: 576px) {
+    .admin-products-header,
+    .admin-products-search {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
+    .admin-product-mobile-item .btn {
+      width: 100%;
+    }
+  }
+</style>
+
+<!-- =====================================================
+     JS: BUSCADOR EN VIVO
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("productSearch");
+    const items = Array.from(document.querySelectorAll(".product-admin-item"));
+    const noResults = document.getElementById("productNoResults");
+
+    if (!input) return;
+
+    input.addEventListener("input", function () {
+      const q = input.value.trim().toLowerCase();
+      let visibleCount = 0;
+
+      items.forEach(function (item) {
+        const text = item.dataset.search || "";
+        const match = text.includes(q);
+
+        item.style.display = match ? "" : "none";
+
+        if (match) {
+          visibleCount += 1;
+        }
+      });
+
+      if (q && visibleCount === 0) {
+        noResults.classList.remove("d-none");
+      } else {
+        noResults.classList.add("d-none");
+      }
+    });
+  });
+</script>
 {% endblock %}

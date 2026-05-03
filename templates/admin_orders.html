@@ -8,109 +8,113 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h4 class="mb-0">Historial de compras</h4>
-        <small class="text-muted">
-          Consulta, filtra y exporta las órdenes registradas
-        </small>
-      </div>
+    <div class="admin-orders-header mb-3">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h4 class="mb-0">Historial de compras</h4>
+          <small class="text-muted">
+            Consulta, filtra y exporta las órdenes registradas
+          </small>
+        </div>
 
-      <a class="btn btn-outline-secondary btn-sm"
-         href="{{ url_for('admin_panel') }}">
-        Volver al panel
-      </a>
+        <a class="btn btn-outline-secondary btn-sm"
+           href="{{ url_for('admin_panel') }}">
+          Volver al panel
+        </a>
+      </div>
     </div>
 
     <!-- =====================================================
          FILTROS
          ===================================================== -->
-    <form method="GET" action="{{ url_for('admin_orders') }}" class="mb-3">
+    <div class="admin-orders-filter mb-3">
+      <form method="GET" action="{{ url_for('admin_orders') }}">
 
-      <!-- Fila 1 -->
-      <div class="row g-2 align-items-end mb-2">
+        <!-- Fila 1 -->
+        <div class="row g-2 align-items-end mb-2">
 
-        <!-- Estado -->
-        <div class="col-12 col-md-3">
-          <label class="form-label mb-1">Estado</label>
-          <select class="form-select" name="estado">
-            <option value="" {% if not estado %}selected{% endif %}>Todos</option>
-            <option value="pagada" {% if estado == "pagada" %}selected{% endif %}>Pagada</option>
-            <option value="pendiente" {% if estado == "pendiente" %}selected{% endif %}>Pendiente</option>
-          </select>
-        </div>
-
-        <!-- Tipo de pago -->
-        <div class="col-12 col-md-3">
-          <label class="form-label mb-1">Tipo de pago</label>
-          <select class="form-select" name="pago">
-            <option value="" {% if not pago %}selected{% endif %}>Todos</option>
-            <option value="contado" {% if pago == "contado" %}selected{% endif %}>Contado</option>
-            <option value="credito" {% if pago == "credito" or pago == "crédito" %}selected{% endif %}>Crédito</option>
-          </select>
-        </div>
-
-        <!-- Búsqueda -->
-        <div class="col-12 col-md-6">
-          <label class="form-label mb-1">Buscar</label>
-          <input
-            class="form-control"
-            name="q"
-            value="{{ q }}"
-            placeholder="Nombre, Código de Colaborador o # de Orden"
-            autocomplete="off"
-          >
-        </div>
-
-      </div>
-
-      <!-- Fila 2 -->
-      <div class="row g-2 align-items-end">
-
-        <!-- Desde -->
-        <div class="col-6 col-md-3">
-          <label class="form-label mb-1">Desde</label>
-          <input
-            type="date"
-            name="start"
-            class="form-control"
-            value="{{ start }}"
-          >
-        </div>
-
-        <!-- Hasta -->
-        <div class="col-6 col-md-3">
-          <label class="form-label mb-1">Hasta</label>
-          <input
-            type="date"
-            name="end"
-            class="form-control"
-            value="{{ end }}"
-          >
-        </div>
-
-        <!-- Botones -->
-        <div class="col-12 col-md-6">
-          <div class="d-flex flex-wrap gap-2">
-            <button class="btn btn-primary flex-fill" type="submit">
-              Filtrar
-            </button>
-
-            <a class="btn btn-outline-secondary flex-fill"
-               href="{{ url_for('admin_orders') }}">
-              Limpiar
-            </a>
-
-            <a class="btn btn-outline-success flex-fill"
-               href="{{ url_for('admin_orders_export', estado=estado, pago=pago, q=q, start=start, end=end) }}">
-              Exportar Excel
-            </a>
+          <!-- Estado -->
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1">Estado</label>
+            <select class="form-select" name="estado">
+              <option value="" {% if not estado %}selected{% endif %}>Todos</option>
+              <option value="pagada" {% if estado == "pagada" %}selected{% endif %}>Pagada</option>
+              <option value="pendiente" {% if estado == "pendiente" %}selected{% endif %}>Pendiente</option>
+            </select>
           </div>
+
+          <!-- Tipo de pago -->
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1">Tipo de pago</label>
+            <select class="form-select" name="pago">
+              <option value="" {% if not pago %}selected{% endif %}>Todos</option>
+              <option value="contado" {% if pago == "contado" %}selected{% endif %}>Contado</option>
+              <option value="credito" {% if pago == "credito" or pago == "crédito" %}selected{% endif %}>Crédito</option>
+            </select>
+          </div>
+
+          <!-- Búsqueda -->
+          <div class="col-12 col-md-6">
+            <label class="form-label mb-1">Buscar</label>
+            <input
+              class="form-control"
+              name="q"
+              value="{{ q }}"
+              placeholder="Nombre, Código de Colaborador o # de Orden"
+              autocomplete="off"
+            >
+          </div>
+
         </div>
 
-      </div>
+        <!-- Fila 2 -->
+        <div class="row g-2 align-items-end">
 
-    </form>
+          <!-- Desde -->
+          <div class="col-6 col-md-3">
+            <label class="form-label mb-1">Desde</label>
+            <input
+              type="date"
+              name="start"
+              class="form-control"
+              value="{{ start }}"
+            >
+          </div>
+
+          <!-- Hasta -->
+          <div class="col-6 col-md-3">
+            <label class="form-label mb-1">Hasta</label>
+            <input
+              type="date"
+              name="end"
+              class="form-control"
+              value="{{ end }}"
+            >
+          </div>
+
+          <!-- Botones -->
+          <div class="col-12 col-md-6">
+            <div class="d-flex flex-wrap gap-2">
+              <button class="btn btn-primary flex-fill" type="submit">
+                Filtrar
+              </button>
+
+              <a class="btn btn-outline-secondary flex-fill"
+                 href="{{ url_for('admin_orders') }}">
+                Limpiar
+              </a>
+
+              <a class="btn btn-outline-success flex-fill"
+                 href="{{ url_for('admin_orders_export', estado=estado, pago=pago, q=q, start=start, end=end) }}">
+                Exportar Excel
+              </a>
+            </div>
+          </div>
+
+        </div>
+
+      </form>
+    </div>
 
     <!-- =====================================================
          RESUMEN
@@ -118,7 +122,7 @@
     <div class="row g-2 mb-3">
 
       <div class="col-12 col-md-4">
-        <div class="border rounded p-2 bg-white">
+        <div class="admin-orders-summary-box">
           <small class="text-muted">Órdenes encontradas</small>
           <div class="fw-bold">
             {{ num_ordenes }}
@@ -127,7 +131,7 @@
       </div>
 
       <div class="col-12 col-md-4">
-        <div class="border rounded p-2 bg-white">
+        <div class="admin-orders-summary-box">
           <small class="text-muted">Rango consultado</small>
           <div class="fw-bold">
             {{ start }} al {{ end }}
@@ -136,10 +140,10 @@
       </div>
 
       <div class="col-12 col-md-4">
-        <div class="border rounded p-2 bg-white">
+        <div class="admin-orders-summary-box">
           <small class="text-muted">Total del filtro</small>
           <div class="fw-bold">
-            ₡{{ "%.2f"|format(total_filtro) }}
+            {{ total_filtro|crc }}
           </div>
         </div>
       </div>
@@ -147,9 +151,9 @@
     </div>
 
     <!-- =====================================================
-         TABLA DE ÓRDENES
+         TABLA DESKTOP
          ===================================================== -->
-    <div class="table-responsive">
+    <div class="table-responsive d-none d-md-block">
       <table class="table table-bordered table-striped align-middle mb-0">
         <thead class="table-dark">
           <tr>
@@ -218,7 +222,7 @@
             </td>
 
             <td>
-              <b>₡{{ "%.2f"|format(o.total) }}</b>
+              <b>{{ o.total|crc }}</b>
             </td>
 
             <td>
@@ -242,6 +246,93 @@
     </div>
 
     <!-- =====================================================
+         VISTA MÓVIL
+         ===================================================== -->
+    <div class="d-md-none">
+      {% for o in orders %}
+      {% set pago_norm = o.tipo_pago|string|lower|replace('é','e')|trim %}
+      {% set estado_norm = o.estado|string|lower|trim %}
+
+      <div class="admin-orders-mobile-item {% if estado_norm == 'pendiente' %}admin-orders-mobile-warning{% endif %}">
+
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <div class="fw-bold">
+              Orden #{{ o.id }}
+            </div>
+
+            <small class="text-muted">
+              {{ o.fecha }}
+            </small>
+          </div>
+
+          <div class="text-end">
+            {% if estado_norm == "pendiente" %}
+              <span class="badge bg-danger">Pendiente</span>
+            {% else %}
+              <span class="badge bg-primary">Pagada</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <small class="text-muted d-block">Comprador</small>
+
+          {% if o.nombre_usuario %}
+            <div class="fw-semibold">
+              {{ o.nombre_usuario }}
+            </div>
+
+            <small class="text-muted">
+              Registrado
+              {% if o.codigo_usuario %}
+                · Código: {{ o.codigo_usuario }}
+              {% endif %}
+            </small>
+          {% else %}
+            <div class="fw-semibold">
+              {{ o.nombre_no_asociado or "Sin nombre" }}
+            </div>
+
+            <small class="text-muted">
+              No asociado
+            </small>
+          {% endif %}
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <div>
+            <small class="text-muted d-block">Pago</small>
+            {% if pago_norm == "credito" %}
+              <span class="badge bg-warning text-dark">Crédito</span>
+            {% else %}
+              <span class="badge bg-success">Contado</span>
+            {% endif %}
+          </div>
+
+          <div class="text-end">
+            <small class="text-muted d-block">Total</small>
+            <b>{{ o.total|crc }}</b>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <a class="btn btn-outline-primary btn-sm w-100"
+             href="{{ url_for('admin_order_detail', order_id=o.id) }}">
+            Ver detalle
+          </a>
+        </div>
+
+      </div>
+
+      {% else %}
+      <div class="alert alert-light border text-center text-muted mb-0">
+        No hay órdenes para los filtros seleccionados.
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- =====================================================
          NOTA
          ===================================================== -->
     <div class="alert alert-light border mt-3 mb-0">
@@ -253,4 +344,59 @@
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS HISTORIAL ADMIN
+     ===================================================== -->
+<style>
+  .admin-orders-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .admin-orders-filter {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .admin-orders-summary-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .admin-orders-mobile-item {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
+  .admin-orders-mobile-warning {
+    border-left-color: #ffc107;
+  }
+
+  .table b,
+  .admin-orders-mobile-item b {
+    font-weight: 700;
+  }
+
+  @media (max-width: 576px) {
+    .admin-orders-header,
+    .admin-orders-filter {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+  }
+</style>
 {% endblock %}

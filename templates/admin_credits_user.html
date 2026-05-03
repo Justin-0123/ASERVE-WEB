@@ -8,29 +8,46 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h5 class="mb-0">Créditos pendientes</h5>
-        <small class="text-muted">
-          Colaborador: <b>{{ user.nombre }}</b>
-        </small>
+    <div class="admin-credit-user-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h5 class="mb-0">Créditos pendientes</h5>
+          <small class="text-muted">
+            Colaborador: <b>{{ user.nombre }}</b>
+          </small>
+        </div>
+
+        <a href="{{ url_for('admin_credits') }}" class="btn btn-outline-secondary btn-sm">
+          Volver a créditos
+        </a>
       </div>
 
-      <a href="{{ url_for('admin_credits') }}" class="btn btn-outline-secondary btn-sm">
-        Volver a créditos
-      </a>
     </div>
 
     <!-- =====================================================
          RESUMEN
          ===================================================== -->
-    <div class="d-flex justify-content-end mb-3">
-      <div class="border rounded p-2 text-end bg-white" style="min-width: 220px;">
-        <div class="small text-muted">Deuda total pendiente</div>
-        <div class="fs-5 fw-bold">
-          ₡{{ "%.2f"|format(deuda_total) }}
+    <div class="row g-2 mb-3">
+
+      <div class="col-12 col-md-6">
+        <div class="admin-credit-user-summary-box">
+          <small class="text-muted">Órdenes pendientes</small>
+          <div class="fw-bold">
+            {{ orders|length if orders else 0 }}
+          </div>
         </div>
       </div>
+
+      <div class="col-12 col-md-6">
+        <div class="admin-credit-user-summary-box">
+          <small class="text-muted">Deuda total pendiente</small>
+          <div class="fw-bold">
+            {{ deuda_total|crc }}
+          </div>
+        </div>
+      </div>
+
     </div>
 
     {% if orders and orders|length > 0 %}
@@ -52,7 +69,7 @@
       <!-- =====================================================
            ACCIONES DE SELECCIÓN
            ===================================================== -->
-      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-2 gap-2">
+      <div class="admin-credit-user-actions mb-3">
 
         <div class="form-check">
           <input class="form-check-input" type="checkbox" id="checkAll">
@@ -61,13 +78,13 @@
           </label>
         </div>
 
-        <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
           <div class="small text-muted">
             Total seleccionado:
           </div>
 
           <div class="fw-bold" id="selectedTotal">
-            ₡0.00
+            ₡0
           </div>
 
           <button
@@ -83,9 +100,9 @@
       </div>
 
       <!-- =====================================================
-           TABLA DE CRÉDITOS PENDIENTES
+           TABLA DESKTOP
            ===================================================== -->
-      <div class="table-responsive">
+      <div class="table-responsive d-none d-md-block">
         <table class="table table-bordered table-striped align-middle mb-0">
           <thead class="table-dark">
             <tr>
@@ -124,7 +141,7 @@
 
               <!-- Total -->
               <td>
-                <b>₡{{ "%.2f"|format(o.total) }}</b>
+                <b>{{ o.total|crc }}</b>
               </td>
 
               <!-- Acciones -->
@@ -159,13 +176,87 @@
         </table>
       </div>
 
+      <!-- =====================================================
+           VISTA MÓVIL
+           ===================================================== -->
+      <div class="d-md-none">
+
+        {% for o in orders %}
+        <div class="admin-credit-user-mobile-item">
+
+          <div class="d-flex justify-content-between align-items-start gap-2">
+
+            <div>
+              <div class="fw-bold">
+                Orden #{{ o.id }}
+              </div>
+
+              <small class="text-muted">
+                {{ o.fecha }}
+              </small>
+            </div>
+
+            <div class="text-end">
+              <small class="text-muted d-block">Total</small>
+              <b>{{ o.total|crc }}</b>
+            </div>
+
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mt-3">
+            <div class="form-check">
+              <input
+                class="form-check-input orderCheck"
+                type="checkbox"
+                name="order_ids"
+                value="{{ o.id }}"
+                data-total="{{ o.total }}"
+                form="bulkPayForm"
+                id="orderMobile{{ o.id }}">
+
+              <label class="form-check-label" for="orderMobile{{ o.id }}">
+                Seleccionar
+              </label>
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 mt-3">
+
+            <a class="btn btn-outline-primary btn-sm flex-fill"
+               href="{{ url_for('admin_order_detail', order_id=o.id, from_page='credits', user_id=user.id) }}">
+              Ver detalle
+            </a>
+
+            <form
+              method="POST"
+              action="{{ url_for('admin_credits_pay', order_id=o.id) }}"
+              class="flex-fill"
+              onsubmit="return confirm('¿Marcar esta orden como pagada?');">
+
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+              <button class="btn btn-success btn-sm w-100" type="submit">
+                Marcar pagada
+              </button>
+            </form>
+
+          </div>
+
+        </div>
+        {% endfor %}
+
+      </div>
+
     {% else %}
 
       <!-- =====================================================
            SIN CRÉDITOS
            ===================================================== -->
-      <div class="alert alert-light border text-center mb-0">
+      <div class="empty-credit-box text-center">
+        <div class="empty-credit-icon">✓</div>
+
         <h6 class="mb-1">No hay créditos pendientes</h6>
+
         <div class="text-muted">
           Este colaborador no tiene órdenes a crédito pendientes de pago.
         </div>
@@ -177,27 +268,130 @@
 </div>
 
 <!-- =====================================================
+     ESTILOS DETALLE CRÉDITOS POR COLABORADOR
+     ===================================================== -->
+<style>
+  .admin-credit-user-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .admin-credit-user-summary-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .admin-credit-user-actions {
+    border: 1px solid #d9dee3;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .8rem;
+  }
+
+  .admin-credit-user-mobile-item {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
+  .empty-credit-box {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 2rem 1rem;
+  }
+
+  .empty-credit-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    background: #e7f6ee;
+    color: #198754;
+    display: grid;
+    place-items: center;
+    margin: 0 auto .75rem auto;
+    font-weight: 800;
+    font-size: 1.2rem;
+    border: 1px solid #b7e4c7;
+  }
+
+  .table b,
+  .admin-credit-user-mobile-item b {
+    font-weight: 700;
+  }
+
+  #selectedTotal {
+    min-width: 90px;
+  }
+
+  @media (max-width: 576px) {
+    .admin-credit-user-header,
+    .admin-credit-user-actions {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
+    .admin-credit-user-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .admin-credit-user-actions .btn {
+      width: 100%;
+    }
+  }
+</style>
+
+<!-- =====================================================
      JS: TOTAL SELECCIONADO Y SELECCIONAR TODAS
+     - Solo toma en cuenta los checkboxes visibles
+     - Evita duplicar totales por tener vista desktop y móvil
      ===================================================== -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const selectedTotalEl = document.getElementById("selectedTotal");
     const btnPaySelected = document.getElementById("btnPaySelected");
     const checkAll = document.getElementById("checkAll");
+    const bulkPayForm = document.getElementById("bulkPayForm");
 
-    function checks() {
+    function isVisible(el) {
+      return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    }
+
+    function checksVisibles() {
+      return Array.from(document.querySelectorAll(".orderCheck")).filter(function (chk) {
+        return isVisible(chk);
+      });
+    }
+
+    function checksTodos() {
       return Array.from(document.querySelectorAll(".orderCheck"));
     }
 
     function formatCRC(n) {
-      return "₡" + n.toFixed(2);
+      return "₡" + Math.round(n).toLocaleString("es-CR");
     }
 
     function recalc() {
       let total = 0;
       let count = 0;
 
-      checks().forEach(function (chk) {
+      checksVisibles().forEach(function (chk) {
         if (chk.checked) {
           const val = parseFloat(chk.dataset.total || "0");
           total += val;
@@ -214,8 +408,9 @@
       }
 
       if (checkAll) {
-        const all = checks();
-        const allChecked = all.length > 0 && all.every(function (c) {
+        const visibles = checksVisibles();
+
+        const allChecked = visibles.length > 0 && visibles.every(function (c) {
           return c.checked;
         });
 
@@ -227,7 +422,7 @@
       checkAll.addEventListener("change", function () {
         const state = checkAll.checked;
 
-        checks().forEach(function (chk) {
+        checksVisibles().forEach(function (chk) {
           chk.checked = state;
         });
 
@@ -235,9 +430,19 @@
       });
     }
 
-    checks().forEach(function (chk) {
+    checksTodos().forEach(function (chk) {
       chk.addEventListener("change", recalc);
     });
+
+    if (bulkPayForm) {
+      bulkPayForm.addEventListener("submit", function () {
+        checksTodos().forEach(function (chk) {
+          if (!isVisible(chk)) {
+            chk.checked = false;
+          }
+        });
+      });
+    }
 
     recalc();
   });
