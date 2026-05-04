@@ -46,7 +46,7 @@
   </div>
 
   <!-- =====================================================
-       KPIs PRINCIPALES
+       KPIS PRINCIPALES
        ===================================================== -->
   <div class="row g-3 mb-4">
 
@@ -111,18 +111,53 @@
   <!-- =====================================================
        TÍTULO DE MÓDULOS
        ===================================================== -->
-  <div class="mb-3">
-    <h5 class="mb-0">Módulos administrativos</h5>
-    <small class="text-muted">Accesos principales del sistema</small>
+  <div class="admin-modules-title mb-3">
+    <div>
+      <h5 class="mb-0">Módulos administrativos</h5>
+      <small class="text-muted">Accesos principales del sistema</small>
+    </div>
+  </div>
+
+  <!-- =====================================================
+       BUSCADOR DE MÓDULOS
+       ===================================================== -->
+  <div class="admin-module-search mb-3">
+    <label class="form-label mb-1">Buscar módulo</label>
+
+    <div class="input-group">
+      <span class="input-group-text bg-white">
+        🔎
+      </span>
+
+      <input
+        id="adminModuleSearch"
+        type="text"
+        class="form-control form-control-sm"
+        placeholder="Ej: créditos, usuarios, stock, reportes..."
+        autocomplete="off"
+      >
+
+      <button
+        class="btn btn-outline-secondary btn-sm"
+        type="button"
+        id="adminModuleClearSearch">
+        Limpiar
+      </button>
+    </div>
+
+    <small class="text-muted">
+      Podés buscar por nombre del módulo o por función administrativa.
+    </small>
   </div>
 
   <!-- =====================================================
        GRID DE MÓDULOS
        ===================================================== -->
-  <div class="row g-3">
+  <div class="row g-3" id="adminModulesContainer">
 
     <!-- HISTORIAL -->
-    <div class="col-12 col-md-6 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-4 admin-module-wrapper"
+         data-search="historial compras ordenes compradores personas">
       <div class="admin-module admin-history h-100">
 
         <div class="admin-module-head">
@@ -152,7 +187,8 @@
     </div>
 
     <!-- CRÉDITOS -->
-    <div class="col-12 col-md-6 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-4 admin-module-wrapper"
+         data-search="creditos credito pendientes colaborador deuda pagos">
       <div class="admin-module admin-credits h-100">
 
         <div class="admin-module-head">
@@ -182,7 +218,8 @@
     </div>
 
     <!-- INVENTARIO -->
-    <div class="col-12 col-md-6 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-4 admin-module-wrapper"
+         data-search="inventario stock productos minimo bajo imagenes catalogo">
       <div class="admin-module admin-inventory h-100">
 
         <div class="admin-module-head">
@@ -216,7 +253,8 @@
     </div>
 
     <!-- USUARIOS -->
-    <div class="col-12 col-md-6 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-4 admin-module-wrapper"
+         data-search="usuarios asociados administradores roles estados bloqueados contrasenas">
       <div class="admin-module admin-users h-100">
 
         <div class="admin-module-head">
@@ -246,7 +284,8 @@
     </div>
 
     <!-- REPORTES -->
-    <div class="col-12 col-md-6 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-4 admin-module-wrapper"
+         data-search="reportes ventas productos top excel estadisticas">
       <div class="admin-module admin-reports h-100">
 
         <div class="admin-module-head">
@@ -272,7 +311,8 @@
     </div>
 
     <!-- RESPALDO -->
-    <div class="col-12 col-md-6 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-4 admin-module-wrapper"
+         data-search="respaldo backup base de datos imagenes descargar zip">
       <div class="admin-module admin-backup h-100">
 
         <div class="admin-module-head">
@@ -298,7 +338,8 @@
     </div>
 
     <!-- AUDITORÍA -->
-    <div class="col-12 col-md-6 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-4 admin-module-wrapper"
+         data-search="auditoria logs acciones administrativas registro sistema">
       <div class="admin-module admin-audit h-100">
 
         <div class="admin-module-head">
@@ -323,6 +364,13 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- =====================================================
+       SIN RESULTADOS
+       ===================================================== -->
+  <div id="adminModulesNoResults" class="alert alert-light border text-center mt-3 d-none">
+    No se encontraron módulos con ese criterio.
   </div>
 
 </div>
@@ -434,7 +482,7 @@
   .admin-kpi-number {
     margin-top: .25rem;
     font-size: 1.55rem;
-    font-weight: 850;
+    font-weight: 800;
     color: #111827;
     line-height: 1;
   }
@@ -447,6 +495,25 @@
     display: grid;
     place-items: center;
     font-size: 20px;
+  }
+
+  /* =====================================================
+     TÍTULO Y BUSCADOR
+     ===================================================== */
+  .admin-modules-title,
+  .admin-module-search {
+    border: 1px solid var(--premium-border);
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .admin-module-search {
+    background: #f3f4f6;
+  }
+
+  .admin-module-search .form-control {
+    background: #ffffff;
   }
 
   /* =====================================================
@@ -528,7 +595,7 @@
     justify-content: center;
     background: var(--module-soft);
     color: var(--module-accent-dark);
-    font-weight: 850;
+    font-weight: 800;
     font-size: .85rem;
     border: 1px solid rgba(0,0,0,.04);
   }
@@ -639,8 +706,10 @@
      RESPONSIVE
      ===================================================== */
   @media (max-width: 576px) {
-    .admin-hero {
-      padding: 1rem;
+    .admin-hero,
+    .admin-modules-title,
+    .admin-module-search {
+      padding: .9rem;
       border-radius: 16px;
     }
 
@@ -684,5 +753,51 @@
     }
   }
 </style>
+
+<!-- =====================================================
+     JS: BUSCADOR DE MÓDULOS
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("adminModuleSearch");
+    const btnClear = document.getElementById("adminModuleClearSearch");
+    const modules = Array.from(document.querySelectorAll(".admin-module-wrapper"));
+    const noResults = document.getElementById("adminModulesNoResults");
+
+    if (!input) return;
+
+    function filtrarModulos() {
+      const q = input.value.trim().toLowerCase();
+      let visibleCount = 0;
+
+      modules.forEach(function (module) {
+        const text = module.dataset.search || "";
+        const match = text.includes(q);
+
+        module.style.display = match ? "" : "none";
+
+        if (match) {
+          visibleCount += 1;
+        }
+      });
+
+      if (q && visibleCount === 0) {
+        noResults.classList.remove("d-none");
+      } else {
+        noResults.classList.add("d-none");
+      }
+    }
+
+    input.addEventListener("input", filtrarModulos);
+
+    if (btnClear) {
+      btnClear.addEventListener("click", function () {
+        input.value = "";
+        filtrarModulos();
+        input.focus();
+      });
+    }
+  });
+</script>
 
 {% endblock %}

@@ -8,162 +8,191 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h5 class="mb-0">Editar producto</h5>
-        <small class="text-muted">
-          ID: {{ p.id }} · Actualiza datos, stock, estado e imagen del producto
-        </small>
+    <div class="product-edit-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h5 class="mb-0">Editar producto</h5>
+          <small class="text-muted">
+            ID: {{ p.id }} · Actualiza datos, stock, estado e imagen del producto
+          </small>
+        </div>
+
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+          Volver
+        </a>
       </div>
 
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
-        Volver
-      </a>
     </div>
 
     <!-- =====================================================
          FORMULARIO PRINCIPAL DE EDICIÓN
          ===================================================== -->
-    <form method="POST" enctype="multipart/form-data" class="row g-3">
+    <div class="product-edit-form-box mb-3">
 
-      <!-- Token CSRF -->
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <form method="POST" enctype="multipart/form-data" class="row g-3">
 
-      <!-- Nombre -->
-      <div class="col-12 col-md-6">
-        <label class="form-label">Nombre</label>
-        <input
-          type="text"
-          name="nombre"
-          class="form-control"
-          value="{{ p.nombre }}"
-          required
-        >
-      </div>
+        <!-- Token CSRF -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-      <!-- Precio -->
-      <div class="col-12 col-md-3">
-        <label class="form-label">Precio</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          name="precio"
-          class="form-control"
-          value="{{ p.precio }}"
-          required
-        >
-      </div>
-
-      <!-- Stock -->
-      <div class="col-12 col-md-3">
-        <label class="form-label">Stock</label>
-        <input
-          type="number"
-          min="0"
-          name="stock"
-          class="form-control"
-          value="{{ p.stock }}"
-          required
-        >
-      </div>
-
-      <!-- Stock mínimo -->
-      <div class="col-12 col-md-3">
-        <label class="form-label">Stock mínimo</label>
-        <input
-          type="number"
-          min="0"
-          name="stock_minimo"
-          class="form-control"
-          value="{{ p.stock_minimo }}"
-        >
-        <small class="text-muted">
-          Se usa para alertas de reposición.
-        </small>
-      </div>
-
-      <!-- Estado activo -->
-      <div class="col-12 col-md-3 d-flex align-items-end">
-        <div class="form-check mb-2">
+        <!-- Nombre -->
+        <div class="col-12 col-md-6">
+          <label class="form-label">Nombre</label>
           <input
-            class="form-check-input"
-            type="checkbox"
-            name="activo"
-            id="activo"
-            {% if p.activo == 1 %}checked{% endif %}
+            type="text"
+            name="nombre"
+            class="form-control"
+            value="{{ p.nombre }}"
+            required
+            autocomplete="off"
           >
-          <label class="form-check-label" for="activo">
-            Producto Activo
-          </label>
         </div>
-      </div>
 
-      <!-- Imagen -->
-      <div class="col-12 col-md-6">
-        <label class="form-label">Imagen nueva opcional</label>
-        <input
-          class="form-control"
-          type="file"
-          name="imagen"
-          accept=".png,.jpg,.jpeg,.webp"
-        >
+        <!-- Precio -->
+        <div class="col-12 col-md-3">
+          <label class="form-label">Precio</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            name="precio"
+            class="form-control"
+            value="{{ p.precio }}"
+            required
+          >
+        </div>
 
-        <small class="text-muted">
-          Formatos permitidos: PNG, JPG, JPEG o WEBP. Máximo 2 MB.
-        </small>
+        <!-- Stock -->
+        <div class="col-12 col-md-3">
+          <label class="form-label">Stock</label>
+          <input
+            type="number"
+            min="0"
+            name="stock"
+            class="form-control"
+            value="{{ p.stock }}"
+            required
+          >
+        </div>
 
-        {% if p.image_filename %}
-          <div class="border rounded p-2 bg-white mt-3" style="max-width: 260px;">
-            <small class="text-muted d-block mb-2">Imagen actual</small>
+        <!-- Stock mínimo -->
+        <div class="col-12 col-md-3">
+          <label class="form-label">Stock mínimo</label>
+          <input
+            type="number"
+            min="0"
+            name="stock_minimo"
+            class="form-control"
+            value="{{ p.stock_minimo }}"
+          >
+          <small class="text-muted">
+            Se usa para alertas de reposición.
+          </small>
+        </div>
 
-            <img
-              src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
-              style="width:120px;height:120px;object-fit:contain;border-radius:10px;border:1px solid #ddd;background:#fff;"
-              alt="Imagen actual"
-            >
+        <!-- Estado activo -->
+        <div class="col-12 col-md-3">
+          <label class="form-label d-block">Estado</label>
 
-            <div class="mt-2">
-              <button
-                type="submit"
-                class="btn btn-outline-danger btn-sm"
-                formaction="{{ url_for('admin_product_image_delete', product_id=p.id) }}"
-                formmethod="POST"
-                formnovalidate
-                onclick="return confirm('¿Seguro que deseas eliminar la imagen de este producto?');">
-                Eliminar imagen
-              </button>
+          <div class="product-edit-status-box">
+            <div class="form-check mb-0">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                name="activo"
+                id="activo"
+                {% if p.activo == 1 %}checked{% endif %}
+              >
+              <label class="form-check-label fw-semibold" for="activo">
+                Producto activo
+              </label>
             </div>
-          </div>
-        {% else %}
-          <div class="alert alert-light border mt-3 mb-0 py-2">
-            <small class="text-muted">
-              Este producto no tiene imagen registrada.
+
+            <small class="text-muted d-block mt-1">
+              Si se desactiva, no debería mostrarse para compra.
             </small>
           </div>
-        {% endif %}
-      </div>
+        </div>
 
-      <!-- Botones principales -->
-      <div class="col-12 d-flex flex-wrap gap-2 mt-2">
-        <button type="submit" class="btn btn-primary btn-sm">
-          Guardar cambios
-        </button>
+        <!-- Imagen -->
+        <div class="col-12 col-md-6">
+          <label class="form-label">Imagen nueva opcional</label>
+          <input
+            class="form-control"
+            type="file"
+            name="imagen"
+            id="imagenProductoEdit"
+            accept=".png,.jpg,.jpeg,.webp"
+          >
 
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
-          Cancelar
-        </a>
-      </div>
+          <small class="text-muted">
+            Formatos permitidos: PNG, JPG, JPEG o WEBP. Máximo recomendado: 2 MB.
+          </small>
 
-    </form>
+          <!-- Vista previa nueva -->
+          <div id="previewBoxEdit" class="product-edit-image-box mt-3 d-none">
+            <small class="text-muted d-block mb-2">Vista previa nueva</small>
+
+            <img
+              id="previewImagenEdit"
+              src=""
+              alt="Vista previa nueva"
+              class="product-edit-img"
+            >
+          </div>
+
+          {% if p.image_filename %}
+            <div class="product-edit-image-box mt-3">
+              <small class="text-muted d-block mb-2">Imagen actual</small>
+
+              <img
+                src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}"
+                class="product-edit-img"
+                alt="Imagen actual"
+              >
+
+              <div class="mt-2">
+                <button
+                  type="submit"
+                  class="btn btn-outline-danger btn-sm"
+                  formaction="{{ url_for('admin_product_image_delete', product_id=p.id) }}"
+                  formmethod="POST"
+                  formnovalidate
+                  onclick="return confirm('¿Seguro que deseas eliminar la imagen de este producto?');">
+                  Eliminar imagen
+                </button>
+              </div>
+            </div>
+          {% else %}
+            <div class="alert alert-light border mt-3 mb-0 py-2">
+              <small class="text-muted">
+                Este producto no tiene imagen registrada.
+              </small>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Botones principales -->
+        <div class="col-12 d-flex flex-wrap gap-2 mt-2 product-edit-actions">
+          <button type="submit" class="btn btn-primary btn-sm">
+            Guardar cambios
+          </button>
+
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+            Cancelar
+          </a>
+        </div>
+
+      </form>
+
+    </div>
 
     <!-- =====================================================
          ZONA DE ELIMINACIÓN DEL PRODUCTO
          ===================================================== -->
-    <hr class="my-4">
+    <div class="product-delete-box">
 
-    <div class="border rounded p-3 bg-light">
-      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
 
         <div>
           <h6 class="mb-1 text-danger">Eliminar producto</h6>
@@ -186,8 +215,112 @@
         </form>
 
       </div>
+
     </div>
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS EDITAR PRODUCTO
+     ===================================================== -->
+<style>
+  .product-edit-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .product-edit-form-box {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .product-edit-form-box .form-control,
+  .product-edit-form-box .form-select {
+    background-color: #ffffff;
+  }
+
+  .product-edit-status-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+  }
+
+  .product-edit-image-box {
+    border: 1px solid #d9dee3;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: .9rem;
+    max-width: 280px;
+  }
+
+  .product-edit-img {
+    width: 125px;
+    height: 125px;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid #d9dee3;
+    background: #ffffff;
+  }
+
+  .product-delete-box {
+    border: 1px solid #f1c0c0;
+    border-left: 5px solid #dc3545;
+    border-radius: 16px;
+    background: #fff8f8;
+    padding: 1rem;
+  }
+
+  @media (max-width: 576px) {
+    .product-edit-header,
+    .product-edit-form-box,
+    .product-delete-box {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
+    .product-edit-header .btn,
+    .product-edit-actions .btn,
+    .product-delete-box .btn {
+      width: 100%;
+    }
+
+    .product-edit-image-box {
+      max-width: 100%;
+    }
+  }
+</style>
+
+<!-- =====================================================
+     JS: VISTA PREVIA DE IMAGEN NUEVA
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("imagenProductoEdit");
+    const previewBox = document.getElementById("previewBoxEdit");
+    const previewImagen = document.getElementById("previewImagenEdit");
+
+    if (!input) return;
+
+    input.addEventListener("change", function () {
+      const file = input.files[0];
+
+      if (!file) {
+        previewBox.classList.add("d-none");
+        previewImagen.src = "";
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      previewImagen.src = url;
+      previewBox.classList.remove("d-none");
+    });
+  });
+</script>
 {% endblock %}

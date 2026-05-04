@@ -72,6 +72,40 @@
     </div>
 
     <!-- =====================================================
+         BUSCADOR EN VIVO
+         ===================================================== -->
+    {% if creditos %}
+    <div class="admin-credits-search mb-3">
+      <label class="form-label mb-1">Buscar colaborador</label>
+
+      <div class="input-group">
+        <span class="input-group-text bg-white">
+          🔎
+        </span>
+
+        <input
+          id="creditSearch"
+          type="text"
+          class="form-control form-control-sm"
+          placeholder="Ej: nombre del colaborador"
+          autocomplete="off"
+        >
+
+        <button
+          class="btn btn-outline-secondary btn-sm"
+          type="button"
+          id="creditClearSearch">
+          Limpiar
+        </button>
+      </div>
+
+      <small class="text-muted">
+        Podés buscar rápidamente dentro de los colaboradores con crédito pendiente.
+      </small>
+    </div>
+    {% endif %}
+
+    <!-- =====================================================
          TABLA DESKTOP
          ===================================================== -->
     <div class="table-responsive d-none d-md-block">
@@ -87,7 +121,9 @@
 
         <tbody>
           {% for c in creditos %}
-          <tr>
+          <tr
+            class="credit-item"
+            data-search="{{ c.comprador|lower }}">
 
             <td>
               <div class="fw-semibold">
@@ -131,7 +167,9 @@
     <div class="d-md-none">
 
       {% for c in creditos %}
-      <div class="admin-credits-mobile-item">
+      <div
+        class="admin-credits-mobile-item credit-item"
+        data-search="{{ c.comprador|lower }}">
 
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div>
@@ -149,7 +187,7 @@
           </span>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="d-flex justify-content-between align-items-center mt-3 admin-credits-mobile-footer">
           <div>
             <small class="text-muted d-block">Deuda total</small>
             <b>{{ c.deuda_total|crc }}</b>
@@ -169,6 +207,13 @@
       </div>
       {% endfor %}
 
+    </div>
+
+    <!-- =====================================================
+         SIN RESULTADOS DEL BUSCADOR
+         ===================================================== -->
+    <div id="creditNoResults" class="alert alert-light border text-center mt-3 d-none">
+      No se encontraron colaboradores con ese criterio.
     </div>
 
     <!-- =====================================================
@@ -205,9 +250,16 @@
     height: 100%;
   }
 
+  .admin-credits-search {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
   .admin-credits-mobile-item {
     border: 1px solid #d9dee3;
-    border-left: 5px solid #8cc63f;
+    border-left: 5px solid #ffc107;
     border-radius: 14px;
     background: #f3f4f6;
     padding: .9rem;
@@ -221,10 +273,71 @@
   }
 
   @media (max-width: 576px) {
-    .admin-credits-header {
+    .admin-credits-header,
+    .admin-credits-search {
       padding: .9rem;
       border-radius: 14px;
     }
+
+    .admin-credits-header .btn {
+      width: 100%;
+    }
+
+    .admin-credits-mobile-footer {
+      flex-direction: column;
+      align-items: stretch !important;
+      gap: .75rem;
+    }
+
+    .admin-credits-mobile-footer .btn {
+      width: 100%;
+    }
   }
 </style>
+
+<!-- =====================================================
+     JS: BUSCADOR EN VIVO
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("creditSearch");
+    const btnClear = document.getElementById("creditClearSearch");
+    const items = Array.from(document.querySelectorAll(".credit-item"));
+    const noResults = document.getElementById("creditNoResults");
+
+    if (!input) return;
+
+    function filtrarCreditos() {
+      const q = input.value.trim().toLowerCase();
+      let visibleCount = 0;
+
+      items.forEach(function (item) {
+        const text = item.dataset.search || "";
+        const match = text.includes(q);
+
+        item.style.display = match ? "" : "none";
+
+        if (match) {
+          visibleCount += 1;
+        }
+      });
+
+      if (q && visibleCount === 0) {
+        noResults.classList.remove("d-none");
+      } else {
+        noResults.classList.add("d-none");
+      }
+    }
+
+    input.addEventListener("input", filtrarCreditos);
+
+    if (btnClear) {
+      btnClear.addEventListener("click", function () {
+        input.value = "";
+        filtrarCreditos();
+        input.focus();
+      });
+    }
+  });
+</script>
 {% endblock %}

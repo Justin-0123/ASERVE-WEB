@@ -79,7 +79,7 @@
           </select>
         </div>
 
-        <div class="col-12 col-md-3 d-flex flex-wrap gap-2">
+        <div class="col-12 col-md-3 d-flex flex-wrap gap-2 audit-filter-actions">
           <button class="btn btn-primary btn-sm flex-fill" type="submit">
             Filtrar
           </button>
@@ -152,9 +152,15 @@
     <!-- =====================================================
          RESUMEN POR ACCIÓN
          ===================================================== -->
-    <h6 class="mb-2">Resumen por acción</h6>
+    <div class="audit-section-title mb-2">
+      <h6 class="mb-0">Resumen por acción</h6>
+      <small class="text-muted">
+        Cantidad de acciones administrativas agrupadas por tipo.
+      </small>
+    </div>
 
-    <div class="table-responsive mb-3">
+    <!-- Desktop: tabla resumen por acción -->
+    <div class="table-responsive d-none d-md-block mb-3">
       <table class="table table-sm table-bordered table-striped align-middle mb-0">
         <thead class="table-dark">
           <tr>
@@ -205,12 +211,57 @@
       </table>
     </div>
 
+    <!-- Móvil: cards resumen por acción -->
+    <div class="d-md-none mb-3">
+      {% for r in resumen_acciones %}
+        <div class="audit-action-mobile-item">
+
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <small class="text-muted d-block">Acción</small>
+              <span class="badge bg-secondary">
+                {{ r.accion }}
+              </span>
+            </div>
+
+            <div class="text-end">
+              <small class="text-muted d-block">Cantidad</small>
+              <b>{{ r.cantidad }}</b>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <small class="text-muted d-block">Última fecha</small>
+            <div class="fw-semibold">
+              {{ r.ultima_fecha }}
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <a class="btn btn-outline-primary btn-sm w-100"
+               href="{{ url_for('admin_audit_logs',
+                                accion=r.accion,
+                                start=start,
+                                end=end,
+                                ver_detalle=1) }}">
+              Ver detalle
+            </a>
+          </div>
+
+        </div>
+      {% else %}
+        <div class="alert alert-light border text-center text-muted mb-0">
+          No hay acciones registradas para los filtros seleccionados.
+        </div>
+      {% endfor %}
+    </div>
+
     <!-- =====================================================
          DETALLE INDIVIDUAL
          ===================================================== -->
     {% if ver_detalle or accion %}
 
-      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-2">
+      <div class="audit-section-title audit-detail-title mb-2">
         <div>
           <h6 class="mb-0">Detalle de acciones</h6>
           <small class="text-muted">
@@ -229,6 +280,7 @@
         {% endif %}
       </div>
 
+      <!-- Desktop: tabla detalle -->
       <div class="table-responsive d-none d-md-block">
         <table class="table table-sm table-bordered table-striped align-middle mb-0">
           <thead class="table-dark">
@@ -267,26 +319,30 @@
         </table>
       </div>
 
-      <!-- =====================================================
-           DETALLE MÓVIL
-           ===================================================== -->
+      <!-- Móvil: detalle en cards -->
       <div class="d-md-none">
         {% for l in logs %}
           <div class="audit-mobile-item">
 
             <div class="d-flex justify-content-between align-items-start gap-2">
               <div>
-                <div class="fw-bold">
+                <small class="text-muted d-block">Acción</small>
+                <span class="badge bg-secondary">
                   {{ l.accion }}
-                </div>
-                <small class="text-muted">
-                  {{ l.fecha }}
-                </small>
+                </span>
               </div>
 
-              <span class="badge bg-secondary">
-                {{ l.admin_nombre }}
-              </span>
+              <div class="text-end">
+                <small class="text-muted d-block">Admin</small>
+                <b>{{ l.admin_nombre }}</b>
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <small class="text-muted d-block">Fecha</small>
+              <div class="fw-semibold">
+                {{ l.fecha }}
+              </div>
             </div>
 
             <div class="mt-3">
@@ -346,9 +402,24 @@
     height: 100%;
   }
 
+  .audit-section-title {
+    border: 1px solid #d9dee3;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: .85rem .95rem;
+  }
+
+  .audit-detail-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .75rem;
+  }
+
+  .audit-action-mobile-item,
   .audit-mobile-item {
     border: 1px solid #d9dee3;
-    border-left: 5px solid #8cc63f;
+    border-left: 5px solid #64748b;
     border-radius: 14px;
     background: #f3f4f6;
     padding: .9rem;
@@ -357,15 +428,34 @@
   }
 
   .table b,
+  .audit-action-mobile-item b,
   .audit-mobile-item b {
     font-weight: 700;
   }
 
   @media (max-width: 576px) {
     .audit-header,
-    .audit-filter {
+    .audit-filter,
+    .audit-section-title {
       padding: .9rem;
       border-radius: 14px;
+    }
+
+    .audit-header .btn {
+      width: 100%;
+    }
+
+    .audit-filter-actions .btn {
+      width: 100%;
+    }
+
+    .audit-detail-title {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .audit-detail-title .btn {
+      width: 100%;
     }
   }
 </style>

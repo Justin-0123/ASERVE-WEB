@@ -133,16 +133,29 @@
           <!-- Reset contraseña -->
           <div class="col-12 col-md-6">
             <label class="form-label">Reset de contraseña temporal</label>
-            <input
-              class="form-control"
-              name="new_password"
-              type="password"
-              placeholder="Dejar vacío para no cambiar"
-              minlength="8"
-              pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
-              title="Debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número."
-              autocomplete="new-password"
-            >
+
+            <div class="admin-user-password-wrap">
+              <input
+                class="form-control admin-user-password-input"
+                name="new_password"
+                id="adminUserEditPassword"
+                type="password"
+                placeholder="Dejar vacío para no cambiar"
+                minlength="8"
+                pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
+                title="Debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número."
+                autocomplete="new-password"
+              >
+
+              <button
+                type="button"
+                class="admin-user-password-toggle"
+                data-target="adminUserEditPassword"
+                aria-label="Mostrar u ocultar contraseña">
+                👁
+              </button>
+            </div>
+
             <small class="text-muted">
               Si escribís una nueva contraseña, el usuario deberá cambiarla al iniciar sesión.
             </small>
@@ -172,7 +185,7 @@
         <!-- =====================================================
              BOTONES
              ===================================================== -->
-        <div class="d-flex flex-wrap gap-2 mt-4">
+        <div class="d-flex flex-wrap gap-2 mt-4 admin-user-edit-actions">
           <button class="btn btn-primary btn-sm" type="submit">
             Guardar cambios
           </button>
@@ -221,6 +234,31 @@
     background-color: #ffffff;
   }
 
+  .admin-user-password-wrap {
+    position: relative;
+  }
+
+  .admin-user-password-input {
+    padding-right: 2.4rem;
+  }
+
+  .admin-user-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: .65rem;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: .9rem;
+    opacity: .6;
+    line-height: 1;
+  }
+
+  .admin-user-password-toggle:hover {
+    opacity: .85;
+  }
+
   .admin-user-edit-info {
     border: 1px solid #d9dee3;
     border-radius: 14px;
@@ -247,9 +285,38 @@
       border-radius: 14px;
     }
 
-    .admin-user-edit-form .btn {
+    .admin-user-edit-header .btn,
+    .admin-user-edit-actions .btn {
       width: 100%;
     }
   }
 </style>
+
+<!-- =====================================================
+     JS: MOSTRAR / OCULTAR CONTRASEÑA
+     ===================================================== -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const toggleButtons = document.querySelectorAll(".admin-user-password-toggle");
+
+    toggleButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const targetId = btn.getAttribute("data-target");
+        const input = document.getElementById(targetId);
+
+        if (!input) {
+          return;
+        }
+
+        if (input.type === "password") {
+          input.type = "text";
+          btn.textContent = "🙈";
+        } else {
+          input.type = "password";
+          btn.textContent = "👁";
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}

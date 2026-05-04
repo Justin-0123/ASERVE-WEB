@@ -16,6 +16,12 @@
           <small class="text-muted">
             Colaborador: <b>{{ user.nombre }}</b>
           </small>
+
+          <div class="mt-2">
+            <span class="badge bg-warning text-dark">
+              Pendiente de pago
+            </span>
+          </div>
         </div>
 
         <a href="{{ url_for('admin_credits') }}" class="btn btn-outline-secondary btn-sm">
@@ -71,26 +77,28 @@
            ===================================================== -->
       <div class="admin-credit-user-actions mb-3">
 
-        <div class="form-check">
+        <div class="form-check admin-credit-check-all">
           <input class="form-check-input" type="checkbox" id="checkAll">
-          <label class="form-check-label" for="checkAll">
+          <label class="form-check-label fw-semibold" for="checkAll">
             Seleccionar todas
           </label>
+
+          <div class="small text-muted">
+            Marca todas las órdenes visibles en pantalla.
+          </div>
         </div>
 
-        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
-          <div class="small text-muted">
-            Total seleccionado:
-          </div>
+        <div class="admin-credit-selected-box">
+          <small class="text-muted d-block">Total seleccionado</small>
 
-          <div class="fw-bold" id="selectedTotal">
+          <div class="fw-bold fs-6" id="selectedTotal">
             ₡0
           </div>
 
           <button
             type="submit"
             form="bulkPayForm"
-            class="btn btn-success btn-sm"
+            class="btn btn-success btn-sm mt-2"
             id="btnPaySelected"
             disabled>
             Pagar seleccionadas
@@ -203,8 +211,8 @@
 
           </div>
 
-          <div class="d-flex justify-content-between align-items-center mt-3">
-            <div class="form-check">
+          <div class="admin-credit-mobile-select mt-3">
+            <div class="form-check mb-0">
               <input
                 class="form-check-input orderCheck"
                 type="checkbox"
@@ -214,13 +222,13 @@
                 form="bulkPayForm"
                 id="orderMobile{{ o.id }}">
 
-              <label class="form-check-label" for="orderMobile{{ o.id }}">
-                Seleccionar
+              <label class="form-check-label fw-semibold" for="orderMobile{{ o.id }}">
+                Seleccionar esta orden
               </label>
             </div>
           </div>
 
-          <div class="d-flex flex-wrap gap-2 mt-3">
+          <div class="d-flex flex-wrap gap-2 mt-3 admin-credit-mobile-buttons">
 
             <a class="btn btn-outline-primary btn-sm flex-fill"
                href="{{ url_for('admin_order_detail', order_id=o.id, from_page='credits', user_id=user.id) }}">
@@ -289,6 +297,7 @@
 
   .admin-credit-user-actions {
     border: 1px solid #d9dee3;
+    border-left: 5px solid #ffc107;
     border-radius: 14px;
     background: #f3f4f6;
     padding: .9rem;
@@ -298,14 +307,37 @@
     gap: .8rem;
   }
 
+  .admin-credit-check-all {
+    flex: 1 1 auto;
+  }
+
+  .admin-credit-selected-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    min-width: 210px;
+  }
+
+  .admin-credit-selected-box .btn {
+    width: 100%;
+  }
+
   .admin-credit-user-mobile-item {
     border: 1px solid #d9dee3;
-    border-left: 5px solid #8cc63f;
+    border-left: 5px solid #ffc107;
     border-radius: 14px;
     background: #f3f4f6;
     padding: .9rem;
     margin-bottom: .75rem;
     box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
+  .admin-credit-mobile-select {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
   }
 
   .empty-credit-box {
@@ -346,12 +378,25 @@
       border-radius: 14px;
     }
 
+    .admin-credit-user-header .btn {
+      width: 100%;
+    }
+
     .admin-credit-user-actions {
       flex-direction: column;
       align-items: stretch;
     }
 
-    .admin-credit-user-actions .btn {
+    .admin-credit-selected-box {
+      min-width: 100%;
+    }
+
+    .admin-credit-mobile-buttons {
+      flex-direction: column;
+    }
+
+    .admin-credit-mobile-buttons .btn,
+    .admin-credit-mobile-buttons form {
       width: 100%;
     }
   }

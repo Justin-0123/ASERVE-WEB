@@ -8,158 +8,173 @@
     <!-- =====================================================
          ENCABEZADO
          ===================================================== -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
-      <div>
-        <h5 class="mb-0">Nuevo producto</h5>
-        <small class="text-muted">
-          Registra un producto con precio, stock, stock mínimo e imagen opcional
-        </small>
+    <div class="product-add-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h5 class="mb-0">Nuevo producto</h5>
+          <small class="text-muted">
+            Registra un producto con precio, stock, stock mínimo e imagen opcional
+          </small>
+        </div>
+
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+          Volver
+        </a>
       </div>
 
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
-        Volver
-      </a>
     </div>
 
     <!-- =====================================================
          FORMULARIO NUEVO PRODUCTO
          ===================================================== -->
-    <form method="POST"
-          action="{{ url_for('admin_product_add') }}"
-          enctype="multipart/form-data"
-          class="mt-3">
+    <div class="product-add-form-box">
 
-      <!-- Token CSRF -->
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <form method="POST"
+            action="{{ url_for('admin_product_add') }}"
+            enctype="multipart/form-data">
 
-      <div class="row g-3">
+        <!-- Token CSRF -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-        <!-- Nombre -->
-        <div class="col-12 col-md-6">
-          <label class="form-label">Nombre del producto</label>
-          <input
-            type="text"
-            name="nombre"
-            class="form-control"
-            placeholder="Ej: Bebida, snack, artículo..."
-            required
-            autocomplete="off"
-          >
-        </div>
+        <div class="row g-3">
 
-        <!-- Precio -->
-        <div class="col-12 col-md-3">
-          <label class="form-label">Precio</label>
-          <input
-            type="number"
-            name="precio"
-            class="form-control"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            required
-          >
-        </div>
-
-        <!-- Stock -->
-        <div class="col-12 col-md-3">
-          <label class="form-label">Stock inicial</label>
-          <input
-            type="number"
-            name="stock"
-            class="form-control"
-            min="0"
-            value="0"
-            required
-          >
-        </div>
-
-        <!-- Stock mínimo -->
-        <div class="col-12 col-md-3">
-          <label class="form-label">Stock mínimo</label>
-          <input
-            type="number"
-            name="stock_minimo"
-            class="form-control"
-            min="0"
-            value="0"
-          >
-          <small class="text-muted">
-            Se usa para alertas de reposición.
-          </small>
-        </div>
-
-        <!-- Estado activo -->
-        <div class="col-12 col-md-3 d-flex align-items-end">
-          <div class="form-check mb-2">
+          <!-- Nombre -->
+          <div class="col-12 col-md-6">
+            <label class="form-label">Nombre del producto</label>
             <input
-              class="form-check-input"
-              type="checkbox"
-              name="activo"
-              id="activo"
-              checked
-            >
-            <label class="form-check-label" for="activo">
-              Producto activo
-            </label>
-          </div>
-        </div>
-
-        <!-- Imagen -->
-        <div class="col-12 col-md-6">
-          <label class="form-label">Imagen del producto</label>
-          <input
-            type="file"
-            name="imagen"
-            id="imagenProducto"
-            class="form-control"
-            accept=".png,.jpg,.jpeg,.webp"
-          >
-
-          <small class="text-muted">
-            Formatos permitidos: PNG, JPG, JPEG o WEBP. Máximo recomendado: 2 MB.
-          </small>
-
-          <!-- Vista previa -->
-          <div id="previewBox" class="border rounded p-2 bg-white mt-3 d-none" style="max-width: 260px;">
-            <small class="text-muted d-block mb-2">Vista previa</small>
-
-            <img
-              id="previewImagen"
-              src=""
-              alt="Vista previa"
-              style="width: 120px; height: 120px; object-fit: contain; border-radius: 10px; border: 1px solid #ddd; background: #fff;"
+              type="text"
+              name="nombre"
+              class="form-control"
+              placeholder="Ej: Bebida, snack, artículo..."
+              required
+              autocomplete="off"
             >
           </div>
 
-          <div id="noPreviewBox" class="alert alert-light border mt-3 mb-0 py-2">
+          <!-- Precio -->
+          <div class="col-12 col-md-3">
+            <label class="form-label">Precio</label>
+            <input
+              type="number"
+              name="precio"
+              class="form-control"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              required
+            >
+          </div>
+
+          <!-- Stock -->
+          <div class="col-12 col-md-3">
+            <label class="form-label">Stock inicial</label>
+            <input
+              type="number"
+              name="stock"
+              class="form-control"
+              min="0"
+              value="0"
+              required
+            >
+          </div>
+
+          <!-- Stock mínimo -->
+          <div class="col-12 col-md-3">
+            <label class="form-label">Stock mínimo</label>
+            <input
+              type="number"
+              name="stock_minimo"
+              class="form-control"
+              min="0"
+              value="0"
+            >
             <small class="text-muted">
-              No se ha seleccionado ninguna imagen.
+              Se usa para alertas de reposición.
             </small>
           </div>
+
+          <!-- Estado activo -->
+          <div class="col-12 col-md-3">
+            <label class="form-label d-block">Estado</label>
+
+            <div class="product-add-status-box">
+              <div class="form-check mb-0">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  name="activo"
+                  id="activo"
+                  checked
+                >
+                <label class="form-check-label fw-semibold" for="activo">
+                  Producto activo
+                </label>
+              </div>
+
+              <small class="text-muted d-block mt-1">
+                Si está activo, podrá mostrarse en el catálogo.
+              </small>
+            </div>
+          </div>
+
+          <!-- Imagen -->
+          <div class="col-12 col-md-6">
+            <label class="form-label">Imagen del producto</label>
+            <input
+              type="file"
+              name="imagen"
+              id="imagenProducto"
+              class="form-control"
+              accept=".png,.jpg,.jpeg,.webp"
+            >
+
+            <small class="text-muted">
+              Formatos permitidos: PNG, JPG, JPEG o WEBP. Máximo recomendado: 2 MB.
+            </small>
+
+            <!-- Vista previa -->
+            <div id="previewBox" class="product-add-image-box mt-3 d-none">
+              <small class="text-muted d-block mb-2">Vista previa</small>
+
+              <img
+                id="previewImagen"
+                src=""
+                alt="Vista previa"
+                class="product-add-img"
+              >
+            </div>
+
+            <div id="noPreviewBox" class="alert alert-light border mt-3 mb-0 py-2">
+              <small class="text-muted">
+                No se ha seleccionado ninguna imagen.
+              </small>
+            </div>
+          </div>
+
         </div>
 
-      </div>
+        <!-- =====================================================
+             BOTONES
+             ===================================================== -->
+        <div class="d-flex flex-wrap gap-2 mt-4 product-add-actions">
+          <button class="btn btn-primary btn-sm" type="submit">
+            Guardar producto
+          </button>
 
-      <!-- =====================================================
-           BOTONES
-           ===================================================== -->
-      <div class="d-flex flex-wrap gap-2 mt-4">
-        <button class="btn btn-primary btn-sm" type="submit">
-          Guardar producto
-        </button>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+            Cancelar
+          </a>
+        </div>
 
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
-          Cancelar
-        </a>
-      </div>
+      </form>
 
-    </form>
+    </div>
 
     <!-- =====================================================
          NOTA INFORMATIVA
          ===================================================== -->
-    <div class="alert alert-light border mt-4 mb-0">
+    <div class="product-add-note mt-3">
       <small class="text-muted">
         Recomendación: mantené activo únicamente el producto que debe mostrarse en el catálogo.
         El stock mínimo permite generar alertas cuando el inventario llega al límite definido.
@@ -168,6 +183,81 @@
 
   </div>
 </div>
+
+<!-- =====================================================
+     ESTILOS NUEVO PRODUCTO
+     ===================================================== -->
+<style>
+  .product-add-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .product-add-form-box {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .product-add-form-box .form-control,
+  .product-add-form-box .form-select {
+    background-color: #ffffff;
+  }
+
+  .product-add-status-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+  }
+
+  .product-add-image-box {
+    border: 1px solid #d9dee3;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: .9rem;
+    max-width: 280px;
+  }
+
+  .product-add-img {
+    width: 125px;
+    height: 125px;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid #d9dee3;
+    background: #ffffff;
+  }
+
+  .product-add-note {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: .9rem;
+  }
+
+  @media (max-width: 576px) {
+    .product-add-header,
+    .product-add-form-box,
+    .product-add-note {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
+    .product-add-header .btn,
+    .product-add-actions .btn {
+      width: 100%;
+    }
+
+    .product-add-image-box {
+      max-width: 100%;
+    }
+  }
+</style>
 
 <!-- =====================================================
      JS: VISTA PREVIA DE IMAGEN
