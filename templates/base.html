@@ -347,13 +347,15 @@
 
   <!-- =====================================================
        NAVBAR PRINCIPAL
+       - Sin sesión: solo muestra Login
+       - Con sesión: muestra navegación normal del sistema
        ===================================================== -->
   <nav class="navbar navbar-dark aserve-navbar">
     <div class="container-fluid aserve-container d-flex flex-wrap justify-content-between align-items-center">
 
       <!-- Logo / Inicio -->
       <a class="navbar-brand fw-bold mb-0 d-flex align-items-center gap-2"
-         href="{{ url_for('catalogo') }}">
+         href="{% if session.get('user_id') %}{{ url_for('catalogo') }}{% else %}{{ url_for('login') }}{% endif %}">
 
         <span class="aserve-logo-box">
           <img
@@ -372,32 +374,38 @@
       <!-- Acciones superiores -->
       <div class="d-flex flex-wrap navbar-actions justify-content-end">
 
-        <a href="{{ url_for('ver_carrito') }}" class="btn btn-outline-light btn-sm">
-          Carrito
-        </a>
-
         {% if session.get("user_id") %}
 
+          <!-- Carrito -->
+          <a href="{{ url_for('ver_carrito') }}" class="btn btn-outline-light btn-sm">
+            Carrito
+          </a>
+
+          <!-- Perfil -->
           <a href="{{ url_for('perfil') }}" class="btn btn-outline-light btn-sm">
             Perfil
           </a>
 
+          <!-- Mis compras -->
           <a href="{{ url_for('mis_compras') }}" class="btn btn-outline-light btn-sm">
             Mis compras
           </a>
 
+          <!-- Panel Admin -->
           {% if session.get("rol") == "admin" %}
             <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-warning btn-sm">
               Admin
             </a>
           {% endif %}
 
+          <!-- Salir -->
           <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">
             Salir
           </a>
 
         {% else %}
 
+          <!-- Login -->
           <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-sm">
             Login
           </a>

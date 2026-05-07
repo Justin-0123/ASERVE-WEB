@@ -746,28 +746,55 @@ def logout():
 
 
 # =====================================================
-# PROTECCIÓN GLOBAL: CONTRASEÑA TEMPORAL
+# PROTECCIÓN GLOBAL DE ACCESO
+# Objetivo:
+# - Si no hay sesión, solo se permite ver login y archivos estáticos.
+# - Si el usuario tiene contraseña temporal, solo puede cambiarla o cerrar sesión.
 # =====================================================
 @app.before_request
-def proteger_password_temporal():
-    if "user_id" not in session:
+def proteger_acceso_global():
+    # Nombre de la ruta actual
+    endpoint = request.endpoint
+
+    # Algunas solicitudes pueden no tener endpoint definido
+    if endpoint is None:
         return None
 
-    rutas_permitidas = {
+    # =====================================================
+    # RUTAS PÚBLICAS PERMITIDAS SIN LOGIN
+    # =====================================================
+    rutas_publicas = {
+        "login",
+        "static"
+    }
+
+    # Permitir acceso a login y archivos estáticos
+    if endpoint in rutas_publicas:
+        return None
+
+    # =====================================================
+    # SI NO HAY SESIÓN, REDIRIGIR SIEMPRE AL LOGIN
+    # =====================================================
+    if "user_id" not in session:
+        flash("Debes iniciar sesión para acceder a ASERVE.", "warning")
+        return redirect(url_for("login"))
+
+    # =====================================================
+    # RUTAS PERMITIDAS CON CONTRASEÑA TEMPORAL
+    # =====================================================
+    rutas_password_temporal = {
         "cambiar_password_temporal",
         "logout",
         "static"
     }
 
-    if request.endpoint in rutas_permitidas:
-        return None
-
+    # Si el usuario tiene contraseña temporal, solo puede cambiarla o salir
     if session.get("password_temporal") == 1:
-        flash("Debes cambiar tu contraseña temporal antes de continuar.", "warning")
-        return redirect(url_for("cambiar_password_temporal"))
+        if endpoint not in rutas_password_temporal:
+            flash("Debes cambiar tu contraseña temporal antes de continuar.", "warning")
+            return redirect(url_for("cambiar_password_temporal"))
 
     return None
-
 
 # =====================================================
 # PERFIL
@@ -4016,6 +4043,7 @@ def carrito_clear():
 
 # =====================================================
 # CHECKOUT
+# - Solo usuarios con sesión pueden comprar
 # - Valida stock antes de confirmar
 # - Evita reenvío normal del formulario con token interno
 # - Calcula total siempre desde base de datos
@@ -4024,6 +4052,14 @@ def carrito_clear():
 # =====================================================
 @app.route("/checkout", methods=["GET", "POST"])
 def checkout():
+    # =====================================================
+    # SEGURIDAD: SOLO USUARIOS CON SESIÓN
+    # Aunque ya existe protección global, se valida también aquí.
+    # =====================================================
+    if "user_id" not in session:
+        flash("Debes iniciar sesión para realizar compras en ASERVE.", "warning")
+        return redirect(url_for("login"))
+
     cart = get_cart()
 
     if not cart:
@@ -4060,6 +4096,19 @@ def checkout():
         session.pop("checkout_token", None)
         flash("Tu carrito está vacío.", "info")
         return redirect(url_for("catalogo"))
+
+    # =====================================================
+    # DATOS DEL USUARIO LOGUEADO
+    # =====================================================
+    user_id = session.get("user_id")
+    rol = session.get("rol")
+
+    # La tabla orders solo acepta: asociado / no_asociado.
+    # Como ahora toda compra requiere sesión, registramos como asociado.
+    tipo_usuario = "asociado"
+
+    # Admin y asociado pueden usar crédito.
+    can_credit = True if rol in ("admin", "asociado") else False
 
     # =====================================================
     # GET: MOSTRAR PANTALLA DE CONFIRMACIÓN
@@ -4108,12 +4157,6 @@ def checkout():
                 "subtotal": subtotal
             })
 
-        user_id = session.get("user_id")
-        rol = session.get("rol")
-
-        es_no_asociado = True if not user_id else False
-        can_credit = True if (user_id and rol in ("admin", "asociado")) else False
-
         # Token interno para evitar reenvío normal del formulario
         checkout_token = secrets.token_urlsafe(24)
         session["checkout_token"] = checkout_token
@@ -4124,7 +4167,7 @@ def checkout():
             items=items,
             total=total,
             rol=rol,
-            es_no_asociado=es_no_asociado,
+            es_no_asociado=False,
             can_credit=can_credit,
             checkout_token=checkout_token
         )
@@ -4141,32 +4184,17 @@ def checkout():
         return redirect(url_for("ver_carrito"))
 
     tipo_pago = norm_text(request.form.get("tipo_pago"))
-    nombre_no_asociado = (request.form.get("nombre_no_asociado") or "").strip()
 
     if tipo_pago not in ("contado", "credito"):
         flash("Tipo de pago inválido.", "danger")
         return redirect(url_for("checkout"))
 
-    user_id = session.get("user_id")
-    rol = session.get("rol")
-    tipo_usuario = "asociado" if user_id else "no_asociado"
-
     # =====================================================
-    # VALIDACIONES DE TIPO DE USUARIO / PAGO
+    # VALIDAR PERMISOS DE CRÉDITO
     # =====================================================
-    if tipo_usuario == "no_asociado":
-        if tipo_pago != "contado":
-            flash("Solo usuarios registrados pueden comprar a crédito.", "danger")
-            return redirect(url_for("checkout"))
-
-        if not nombre_no_asociado:
-            flash("Debes escribir tu nombre para finalizar la compra.", "danger")
-            return redirect(url_for("checkout"))
-
-    if tipo_usuario == "asociado" and tipo_pago == "credito":
-        if rol not in ("admin", "asociado"):
-            flash("Tu usuario no tiene permiso para comprar a crédito.", "danger")
-            return redirect(url_for("checkout"))
+    if tipo_pago == "credito" and not can_credit:
+        flash("Tu usuario no tiene permiso para comprar a crédito.", "danger")
+        return redirect(url_for("checkout"))
 
     try:
         # =====================================================
@@ -4246,8 +4274,8 @@ def checkout():
             (
                 fecha,
                 tipo_usuario,
-                user_id if tipo_usuario == "asociado" else None,
-                nombre_no_asociado if tipo_usuario == "no_asociado" else None,
+                user_id,
+                None,
                 tipo_pago,
                 float(total),
                 estado
@@ -4278,8 +4306,6 @@ def checkout():
                 )
             )
 
-            # Descuento protegido:
-            # solo descuenta si el producto sigue activo y tiene stock suficiente.
             stock_update = db.execute(
                 """
                 UPDATE products
@@ -4328,9 +4354,6 @@ def checkout():
         session["cart"] = {}
         session.pop("checkout_token", None)
 
-        # Guarda la última orden creada en esta sesión.
-        # Esto permite que un comprador no asociado vea su comprobante
-        # sin dejar abierta la ruta para cualquier persona.
         session["last_order_id"] = order_id
         session.modified = True
 
@@ -4349,10 +4372,17 @@ def checkout():
 # - Protege la orden para que no se pueda ver cambiando el ID en la URL
 # - Asociado: solo ve sus propias órdenes
 # - Admin: puede ver cualquier orden
-# - No asociado: solo puede ver la orden recién creada en su sesión
+# - No se permite acceso sin sesión
 # =====================================================
 @app.route("/orden/<int:order_id>")
 def order_success(order_id):
+    # =====================================================
+    # SEGURIDAD: SOLO USUARIOS CON SESIÓN
+    # =====================================================
+    if "user_id" not in session:
+        flash("Debes iniciar sesión para ver una orden.", "warning")
+        return redirect(url_for("login"))
+
     db = get_db()
 
     orden = db.execute(
@@ -4376,32 +4406,25 @@ def order_success(order_id):
     # =====================================================
     usuario_logueado = session.get("user_id")
     rol = session.get("rol")
-    last_order_id = session.get("last_order_id")
 
     puede_ver = False
 
     # Admin puede ver cualquier comprobante
-    if usuario_logueado and rol == "admin":
+    if rol == "admin":
         puede_ver = True
 
     # Asociado solo puede ver sus propias órdenes
-    elif usuario_logueado and orden["user_id"] == usuario_logueado:
-        puede_ver = True
-
-    # No asociado solo puede ver la orden recién creada en esa misma sesión
-    elif not orden["user_id"] and last_order_id == order_id:
+    elif orden["user_id"] == usuario_logueado:
         puede_ver = True
 
     if not puede_ver:
         flash("No tenés permiso para ver esta orden.", "warning")
-
-        if usuario_logueado:
-            return redirect(url_for("mis_compras"))
-
-        return redirect(url_for("catalogo"))
+        return redirect(url_for("mis_compras"))
 
     # =====================================================
     # NOMBRE DEL COMPRADOR
+    # - Si es usuario registrado, usa nombre_usuario.
+    # - Si es orden antigua de no asociado, usa nombre_no_asociado.
     # =====================================================
     comprador = orden["nombre_usuario"] if orden["user_id"] else orden["nombre_no_asociado"]
 
@@ -4428,6 +4451,7 @@ def order_success(order_id):
         items=items,
         comprador=comprador
     )
+
 # =====================================================
 # EJECUCIÓN LOCAL
 # =====================================================

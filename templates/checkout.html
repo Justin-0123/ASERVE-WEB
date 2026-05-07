@@ -4,6 +4,7 @@
 {% block content %}
 <!-- =====================================================
      CHECKOUT
+     - Solo usuarios con sesión pueden comprar
      - Resumen del carrito
      - Selección de método de pago
      - Protección CSRF
@@ -114,7 +115,7 @@
         </div>
 
         <!-- =====================================================
-             VISTA MÓVIL: PRODUCTOS EN CARDS
+             VISTA MÓVIL
              ===================================================== -->
         <div class="d-md-none">
 
@@ -191,25 +192,6 @@
             <input type="hidden" name="checkout_token" value="{{ checkout_token }}">
 
             <!-- =====================================================
-                 NOMBRE PARA NO ASOCIADOS
-                 ===================================================== -->
-            {% if es_no_asociado %}
-            <div class="mb-3">
-              <label class="form-label">Nombre</label>
-              <input
-                class="form-control"
-                name="nombre_no_asociado"
-                required
-                autocomplete="name"
-                placeholder="Nombre del comprador"
-              >
-              <div class="form-text">
-                Necesario para registrar la compra de no asociados.
-              </div>
-            </div>
-            {% endif %}
-
-            <!-- =====================================================
                  TIPO DE PAGO
                  ===================================================== -->
             <div class="mb-3">
@@ -230,7 +212,7 @@
                 </select>
 
                 <div class="form-text">
-                  Compra disponible únicamente de contado.
+                  Tu usuario solo tiene disponible compra de contado.
                 </div>
               {% endif %}
             </div>
