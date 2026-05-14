@@ -25,6 +25,11 @@
             Volver
           </a>
 
+          <a class="btn btn-outline-primary btn-sm"
+             href="{{ url_for('admin_stock_movements') }}">
+            Movimientos
+          </a>
+
           <a class="btn btn-outline-dark btn-sm"
              href="{{ url_for('admin_products') }}">
             Gestionar productos
@@ -292,7 +297,8 @@
     <div class="alert alert-light border mt-3 mb-0">
       <small class="text-muted">
         Un producto se marca como <b>bajo</b> cuando está activo, tiene un stock mínimo mayor a cero
-        y su stock actual es igual o menor al mínimo configurado.
+        y su stock actual es igual o menor al mínimo configurado. Para revisar entradas, salidas,
+        ventas, importaciones y ajustes, usá el botón <b>Movimientos</b>.
       </small>
     </div>
 
@@ -354,6 +360,10 @@
     .admin-stock-search {
       padding: .9rem;
       border-radius: 14px;
+    }
+
+    .admin-stock-header .btn {
+      width: 100%;
     }
   }
 </style>

@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block title %}Movimientos de stock - Admin{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="stock-movements-header mb-3">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h5 class="mb-0">Movimientos de stock</h5>
+          <small class="text-muted">
+            Historial de entradas, salidas, ventas, ajustes e importaciones
+          </small>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_stock') }}">
+            Volver a stock
+          </a>
+
+          <a class="btn btn-outline-dark btn-sm" href="{{ url_for('admin_products') }}">
+            Gestión de productos
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================
+         FILTROS
+         ===================================================== -->
+    <div class="stock-movements-filter mb-3">
+      <form method="GET" action="{{ url_for('admin_stock_movements') }}">
+
+        <div class="row g-2 align-items-end">
+
+          <div class="col-12 col-md-4">
+            <label class="form-label mb-1">Buscar</label>
+            <input
+              type="text"
+              name="q"
+              class="form-control form-control-sm"
+              value="{{ q }}"
+              placeholder="Producto, motivo u orden"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1">Motivo</label>
+            <select name="motivo" class="form-select form-select-sm">
+              <option value="" {% if not motivo %}selected{% endif %}>Todos</option>
+
+              {% for m in motivos %}
+                <option value="{{ m.motivo }}" {% if motivo == m.motivo %}selected{% endif %}>
+                  {{ m.motivo }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label mb-1">Desde</label>
+            <input
+              type="date"
+              name="start"
+              class="form-control form-control-sm"
+              value="{{ start }}"
+            >
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label mb-1">Hasta</label>
+            <input
+              type="date"
+              name="end"
+              class="form-control form-control-sm"
+              value="{{ end }}"
+            >
+          </div>
+
+          <div class="col-12 col-md-1 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+              Filtrar
+            </button>
+          </div>
+
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-2">
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_stock_movements') }}">
+            Limpiar
+          </a>
+
+          <a class="btn btn-outline-success btn-sm"
+             href="{{ url_for('admin_stock_movements_export',
+                              q=q,
+                              motivo=motivo,
+                              start=start,
+                              end=end) }}">
+            Exportar Excel
+          </a>
+        </div>
+
+      </form>
+    </div>
+
+    <!-- =====================================================
+         RESUMEN
+         ===================================================== -->
+    <div class="row g-2 mb-3">
+
+      <div class="col-12 col-md-4">
+        <div class="stock-movements-summary-box">
+          <small class="text-muted">Movimientos encontrados</small>
+          <div class="fw-bold">
+            {{ total_movimientos }}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="stock-movements-summary-box">
+          <small class="text-muted">Entradas totales</small>
+          <div class="fw-bold text-success">
+            +{{ total_entradas }}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="stock-movements-summary-box">
+          <small class="text-muted">Salidas totales</small>
+          <div class="fw-bold text-danger">
+            -{{ total_salidas }}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- =====================================================
+         TABLA DESKTOP
+         ===================================================== -->
+    <div class="table-responsive d-none d-md-block">
+      <table class="table table-sm table-bordered table-striped align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th style="width: 170px;">Fecha</th>
+            <th>Producto</th>
+            <th style="width: 110px;">Cambio</th>
+            <th>Motivo</th>
+            <th style="width: 120px;">Orden</th>
+            <th style="width: 110px;">Tipo</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for m in movimientos %}
+          {% set cambio = m.cambio_stock|int %}
+
+          <tr class="{% if cambio > 0 %}table-success{% elif cambio < 0 %}table-warning{% endif %}">
+
+            <td>
+              {{ m.fecha }}
+            </td>
+
+            <td>
+              <div class="fw-semibold">
+                {{ m.producto_nombre or "Producto eliminado" }}
+              </div>
+            </td>
+
+            <td>
+              {% if cambio > 0 %}
+                <span class="badge bg-success">+{{ cambio }}</span>
+              {% else %}
+                <span class="badge bg-danger">{{ cambio }}</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {{ m.motivo }}
+            </td>
+
+            <td>
+              {% if m.order_id %}
+                <a class="btn btn-outline-primary btn-sm"
+                   href="{{ url_for('admin_order_detail', order_id=m.order_id) }}">
+                  #{{ m.order_id }}
+                </a>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% if cambio > 0 %}
+                <span class="badge bg-success">Entrada</span>
+              {% else %}
+                <span class="badge bg-danger">Salida</span>
+              {% endif %}
+            </td>
+
+          </tr>
+
+          {% else %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">
+              No hay movimientos de stock para los filtros seleccionados.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- =====================================================
+         VISTA MÓVIL
+         ===================================================== -->
+    <div class="d-md-none">
+
+      {% for m in movimientos %}
+      {% set cambio = m.cambio_stock|int %}
+
+      <div class="stock-movement-mobile-item {% if cambio > 0 %}stock-movement-mobile-entry{% else %}stock-movement-mobile-exit{% endif %}">
+
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <div class="fw-bold">
+              {{ m.producto_nombre or "Producto eliminado" }}
+            </div>
+
+            <small class="text-muted">
+              {{ m.fecha }}
+            </small>
+          </div>
+
+          <div class="text-end">
+            {% if cambio > 0 %}
+              <span class="badge bg-success">+{{ cambio }}</span>
+            {% else %}
+              <span class="badge bg-danger">{{ cambio }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <small class="text-muted d-block">Motivo</small>
+          <div>
+            {{ m.motivo }}
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <div>
+            <small class="text-muted d-block">Tipo</small>
+            {% if cambio > 0 %}
+              <span class="badge bg-success">Entrada</span>
+            {% else %}
+              <span class="badge bg-danger">Salida</span>
+            {% endif %}
+          </div>
+
+          <div class="text-end">
+            <small class="text-muted d-block">Orden</small>
+            {% if m.order_id %}
+              <a class="btn btn-outline-primary btn-sm"
+                 href="{{ url_for('admin_order_detail', order_id=m.order_id) }}">
+                #{{ m.order_id }}
+              </a>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+
+      {% else %}
+      <div class="alert alert-light border text-center text-muted mb-0">
+        No hay movimientos de stock para los filtros seleccionados.
+      </div>
+      {% endfor %}
+
+    </div>
+
+    <!-- =====================================================
+         NOTA INFORMATIVA
+         ===================================================== -->
+    <div class="alert alert-light border mt-3 mb-0">
+      <small class="text-muted">
+        Los movimientos de stock incluyen ventas, ajustes manuales, importaciones y stock inicial por creación de producto.
+      </small>
+    </div>
+
+  </div>
+</div>
+
+<!-- =====================================================
+     ESTILOS MOVIMIENTOS DE STOCK
+     ===================================================== -->
+<style>
+  .stock-movements-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .stock-movements-filter {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .stock-movements-summary-box {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: .75rem .9rem;
+    height: 100%;
+  }
+
+  .stock-movement-mobile-item {
+    border: 1px solid #d9dee3;
+    border-radius: 14px;
+    background: #f3f4f6;
+    padding: .9rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 .25rem .7rem rgba(16, 24, 40, .045);
+  }
+
+  .stock-movement-mobile-entry {
+    border-left: 5px solid #198754;
+  }
+
+  .stock-movement-mobile-exit {
+    border-left: 5px solid #dc3545;
+  }
+
+  .table b,
+  .stock-movement-mobile-item b {
+    font-weight: 700;
+  }
+
+  @media (max-width: 576px) {
+    .stock-movements-header,
+    .stock-movements-filter {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
+    .stock-movements-header .btn {
+      width: 100%;
+    }
+  }
+</style>
+{% endblock %}

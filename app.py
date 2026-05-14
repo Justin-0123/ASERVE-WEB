@@ -3286,7 +3286,10 @@ def admin_product_add():
             imagen.save(os.path.join(upload_folder_abs, unique_name))
             image_filename = unique_name
 
-        db.execute(
+        # =====================================================
+        # CREAR PRODUCTO
+        # =====================================================
+        cur = db.execute(
             """
             INSERT INTO products (nombre, precio, stock, stock_minimo, activo, image_filename)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -3294,9 +3297,32 @@ def admin_product_add():
             (nombre, precio_num, stock_num, stock_minimo_num, activo, image_filename)
         )
 
+        product_id = cur.lastrowid
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # =====================================================
+        # REGISTRAR STOCK INICIAL
+        # Solo se registra si el producto se creó con stock mayor a 0.
+        # =====================================================
+        if stock_num > 0:
+            db.execute(
+                """
+                INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+                VALUES (?, ?, ?, ?, NULL)
+                """,
+                (
+                    product_id,
+                    stock_num,
+                    "Stock inicial por creación de producto",
+                    fecha
+                )
+            )
+
         registrar_auditoria(
             "Crear producto",
-            f"Producto: {nombre}. Precio: ₡{precio_num:,.2f}. Stock inicial: {stock_num}. Stock mínimo: {stock_minimo_num}. Estado: {'activo' if activo == 1 else 'inactivo'}."
+            f"Producto: {nombre}. Precio: ₡{precio_num:,.2f}. "
+            f"Stock inicial: {stock_num}. Stock mínimo: {stock_minimo_num}. "
+            f"Estado: {'activo' if activo == 1 else 'inactivo'}."
         )
 
         db.commit()
@@ -3402,6 +3428,378 @@ def admin_product_edit(product_id):
         return redirect(url_for("admin_products"))
 
     return render_template("admin_product_edit.html", p=p)
+
+# =====================================================
+# ADMIN: MOVIMIENTOS DE STOCK
+# Ruta: /admin/stock/movements
+# - Muestra entradas y salidas de inventario
+# - Incluye ventas, ajustes manuales, importaciones y stock inicial
+# - Permite filtrar por producto, motivo, orden y fechas
+# =====================================================
+@app.route("/admin/stock/movements")
+def admin_stock_movements():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    db = get_db()
+
+    q = (request.args.get("q") or "").strip()
+    motivo = (request.args.get("motivo") or "").strip()
+    start = (request.args.get("start") or "").strip()
+    end = (request.args.get("end") or "").strip()
+
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
+    hoy = datetime.now().date()
+    hace_14 = hoy - timedelta(days=13)
+
+    if not start:
+        start = hace_14.strftime("%Y-%m-%d")
+
+    if not end:
+        end = hoy.strftime("%Y-%m-%d")
+
+    where = []
+    params = []
+
+    # Buscar por producto, motivo u orden
+    if q:
+        where.append(
+            """
+            (
+                p.nombre LIKE ?
+                OR sm.motivo LIKE ?
+                OR CAST(sm.order_id AS TEXT) LIKE ?
+            )
+            """
+        )
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+
+    # Filtro por motivo
+    if motivo:
+        where.append("sm.motivo = ?")
+        params.append(motivo)
+
+    # Filtro por fechas
+    where.append("date(sm.fecha) >= date(?)")
+    params.append(start)
+
+    where.append("date(sm.fecha) <= date(?)")
+    params.append(end)
+
+    where_sql = "WHERE " + " AND ".join(where)
+
+    # Motivos disponibles para el selector
+    motivos = db.execute(
+        """
+        SELECT DISTINCT motivo
+        FROM stock_movements
+        WHERE motivo IS NOT NULL
+          AND TRIM(motivo) <> ''
+        ORDER BY motivo ASC
+        """
+    ).fetchall()
+
+    movimientos = db.execute(
+        f"""
+        SELECT
+            sm.id,
+            sm.product_id,
+            sm.cambio_stock,
+            sm.motivo,
+            sm.fecha,
+            sm.order_id,
+            p.nombre AS producto_nombre,
+            o.tipo_pago AS orden_tipo_pago,
+            o.estado AS orden_estado
+        FROM stock_movements sm
+        LEFT JOIN products p ON p.id = sm.product_id
+        LEFT JOIN orders o ON o.id = sm.order_id
+        {where_sql}
+        ORDER BY sm.id DESC
+        """,
+        params
+    ).fetchall()
+
+    total_movimientos = len(movimientos)
+    total_entradas = sum(int(m["cambio_stock"]) for m in movimientos if int(m["cambio_stock"]) > 0)
+    total_salidas = abs(sum(int(m["cambio_stock"]) for m in movimientos if int(m["cambio_stock"]) < 0))
+
+    return render_template(
+        "admin_stock_movements.html",
+        movimientos=movimientos,
+        motivos=motivos,
+        q=q,
+        motivo=motivo,
+        start=start,
+        end=end,
+        total_movimientos=total_movimientos,
+        total_entradas=total_entradas,
+        total_salidas=total_salidas
+    )
+
+# =====================================================
+# ADMIN: EXPORTAR MOVIMIENTOS DE STOCK A EXCEL
+# Ruta: /admin/stock/movements/export
+# - Respeta los filtros actuales:
+#   producto/motivo/orden, motivo, fecha desde y fecha hasta
+# =====================================================
+@app.route("/admin/stock/movements/export")
+def admin_stock_movements_export():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    db = get_db()
+
+    q = (request.args.get("q") or "").strip()
+    motivo = (request.args.get("motivo") or "").strip()
+    start = (request.args.get("start") or "").strip()
+    end = (request.args.get("end") or "").strip()
+
+    # =====================================================
+    # DEFAULT: últimos 14 días
+    # =====================================================
+    hoy = datetime.now().date()
+    hace_14 = hoy - timedelta(days=13)
+
+    if not start:
+        start = hace_14.strftime("%Y-%m-%d")
+
+    if not end:
+        end = hoy.strftime("%Y-%m-%d")
+
+    where = []
+    params = []
+
+    # Buscar por producto, motivo u orden
+    if q:
+        where.append(
+            """
+            (
+                p.nombre LIKE ?
+                OR sm.motivo LIKE ?
+                OR CAST(sm.order_id AS TEXT) LIKE ?
+            )
+            """
+        )
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+
+    # Filtro por motivo
+    if motivo:
+        where.append("sm.motivo = ?")
+        params.append(motivo)
+
+    # Filtro por fechas
+    where.append("date(sm.fecha) >= date(?)")
+    params.append(start)
+
+    where.append("date(sm.fecha) <= date(?)")
+    params.append(end)
+
+    where_sql = "WHERE " + " AND ".join(where)
+
+    movimientos = db.execute(
+        f"""
+        SELECT
+            sm.id,
+            sm.product_id,
+            sm.cambio_stock,
+            sm.motivo,
+            sm.fecha,
+            sm.order_id,
+            p.nombre AS producto_nombre,
+            o.tipo_pago AS orden_tipo_pago,
+            o.estado AS orden_estado
+        FROM stock_movements sm
+        LEFT JOIN products p ON p.id = sm.product_id
+        LEFT JOIN orders o ON o.id = sm.order_id
+        {where_sql}
+        ORDER BY sm.id DESC
+        """,
+        params
+    ).fetchall()
+
+    total_movimientos = len(movimientos)
+    total_entradas = sum(
+        int(m["cambio_stock"]) for m in movimientos
+        if int(m["cambio_stock"]) > 0
+    )
+    total_salidas = abs(sum(
+        int(m["cambio_stock"]) for m in movimientos
+        if int(m["cambio_stock"]) < 0
+    ))
+
+    fecha_reporte = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # =====================================================
+    # CREAR EXCEL
+    # =====================================================
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Movimientos stock"
+
+    # Estilos
+    fill_header = PatternFill("solid", fgColor="1F2328")
+    fill_title = PatternFill("solid", fgColor="EAF2F8")
+
+    font_header = Font(color="FFFFFF", bold=True)
+    font_title = Font(bold=True, size=14)
+    font_bold = Font(bold=True)
+
+    alignment_center = Alignment(horizontal="center", vertical="center")
+    alignment_left = Alignment(horizontal="left", vertical="center")
+
+    thin_border = Border(
+        left=Side(style="thin", color="D9DEE3"),
+        right=Side(style="thin", color="D9DEE3"),
+        top=Side(style="thin", color="D9DEE3"),
+        bottom=Side(style="thin", color="D9DEE3")
+    )
+
+    # =====================================================
+    # TÍTULO
+    # =====================================================
+    ws.merge_cells("A1:G1")
+    ws["A1"] = "Movimientos de stock - ASERVE"
+    ws["A1"].font = font_title
+    ws["A1"].fill = fill_title
+    ws["A1"].alignment = alignment_left
+
+    # =====================================================
+    # FILTROS / RESUMEN
+    # =====================================================
+    ws["A3"] = "Fecha reporte"
+    ws["B3"] = fecha_reporte
+
+    ws["A4"] = "Desde"
+    ws["B4"] = start
+
+    ws["C4"] = "Hasta"
+    ws["D4"] = end
+
+    ws["A5"] = "Búsqueda"
+    ws["B5"] = q if q else "Sin búsqueda"
+
+    ws["C5"] = "Motivo"
+    ws["D5"] = motivo if motivo else "Todos"
+
+    ws["A7"] = "Movimientos"
+    ws["B7"] = total_movimientos
+
+    ws["C7"] = "Entradas"
+    ws["D7"] = total_entradas
+
+    ws["E7"] = "Salidas"
+    ws["F7"] = total_salidas
+
+    for row in ws.iter_rows(min_row=3, max_row=7, min_col=1, max_col=7):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = alignment_left
+
+    for cell_ref in ["A3", "A4", "C4", "A5", "C5", "A7", "C7", "E7"]:
+        ws[cell_ref].font = font_bold
+
+    # =====================================================
+    # TABLA
+    # =====================================================
+    start_row = 9
+
+    headers = [
+        "ID",
+        "Fecha",
+        "Producto",
+        "Cambio",
+        "Tipo",
+        "Motivo",
+        "Orden"
+    ]
+
+    for col_num, header in enumerate(headers, start=1):
+        cell = ws.cell(row=start_row, column=col_num)
+        cell.value = header
+        cell.fill = fill_header
+        cell.font = font_header
+        cell.alignment = alignment_center
+        cell.border = thin_border
+
+    current_row = start_row + 1
+
+    for m in movimientos:
+        cambio = int(m["cambio_stock"])
+        tipo = "Entrada" if cambio > 0 else "Salida"
+        orden = f"#{m['order_id']}" if m["order_id"] else "-"
+
+        ws.cell(row=current_row, column=1).value = m["id"]
+        ws.cell(row=current_row, column=2).value = m["fecha"]
+        ws.cell(row=current_row, column=3).value = m["producto_nombre"] or "Producto eliminado"
+        ws.cell(row=current_row, column=4).value = cambio
+        ws.cell(row=current_row, column=5).value = tipo
+        ws.cell(row=current_row, column=6).value = m["motivo"]
+        ws.cell(row=current_row, column=7).value = orden
+
+        for col in range(1, 8):
+            cell = ws.cell(row=current_row, column=col)
+            cell.border = thin_border
+            cell.alignment = alignment_left
+
+        current_row += 1
+
+    if not movimientos:
+        ws.merge_cells(
+            start_row=current_row,
+            start_column=1,
+            end_row=current_row,
+            end_column=7
+        )
+        ws.cell(row=current_row, column=1).value = "No hay movimientos para los filtros seleccionados."
+        ws.cell(row=current_row, column=1).alignment = alignment_center
+
+    # =====================================================
+    # AJUSTES VISUALES
+    # =====================================================
+    widths = {
+        "A": 10,
+        "B": 22,
+        "C": 35,
+        "D": 12,
+        "E": 14,
+        "F": 35,
+        "G": 12,
+    }
+
+    for col_letter, width in widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    ws.freeze_panes = "A10"
+    ws.auto_filter.ref = f"A{start_row}:G{max(start_row, current_row - 1)}"
+
+    # =====================================================
+    # AUDITORÍA
+    # =====================================================
+    registrar_auditoria(
+        "Exportar movimientos de stock",
+        f"Se exportó reporte de movimientos de stock. Movimientos: {total_movimientos}. Entradas: {total_entradas}. Salidas: {total_salidas}.",
+        commit=True
+    )
+
+    # =====================================================
+    # DESCARGA
+    # =====================================================
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"movimientos_stock_aserve_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 # =====================================================
 # ADMIN: AJUSTAR STOCK DE PRODUCTO
 # - Permite sumar o restar stock sin editar manualmente el total
