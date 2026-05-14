@@ -23,6 +23,14 @@
             Volver
           </a>
 
+          <a href="{{ url_for('admin_products_export') }}" class="btn btn-outline-success btn-sm">
+            Exportar inventario
+          </a>
+
+          <a href="{{ url_for('admin_products_import') }}" class="btn btn-outline-primary btn-sm">
+            Importar Excel
+          </a>
+
           <a href="{{ url_for('admin_product_add') }}" class="btn btn-primary btn-sm">
             + Nuevo producto
           </a>
@@ -94,13 +102,26 @@
     <div class="admin-products-search mb-3">
       <label class="form-label mb-1">Buscar producto</label>
 
-      <input
-        id="productSearch"
-        type="text"
-        class="form-control form-control-sm"
-        placeholder="Ej: nombre, estado o alerta"
-        autocomplete="off"
-      >
+      <div class="input-group">
+        <span class="input-group-text bg-white">
+          🔎
+        </span>
+
+        <input
+          id="productSearch"
+          type="text"
+          class="form-control form-control-sm"
+          placeholder="Ej: nombre, estado o alerta"
+          autocomplete="off"
+        >
+
+        <button
+          class="btn btn-outline-secondary btn-sm"
+          type="button"
+          id="productClearSearch">
+          Limpiar
+        </button>
+      </div>
 
       <small class="text-muted">
         Podés buscar por nombre, estado, activo, inactivo, bajo stock u OK.
@@ -447,6 +468,7 @@
       border-radius: 14px;
     }
 
+    .admin-products-header .btn,
     .admin-product-mobile-item .btn {
       width: 100%;
     }
@@ -459,12 +481,13 @@
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const input = document.getElementById("productSearch");
+    const btnClear = document.getElementById("productClearSearch");
     const items = Array.from(document.querySelectorAll(".product-admin-item"));
     const noResults = document.getElementById("productNoResults");
 
     if (!input) return;
 
-    input.addEventListener("input", function () {
+    function filtrarProductosAdmin() {
       const q = input.value.trim().toLowerCase();
       let visibleCount = 0;
 
@@ -484,7 +507,17 @@
       } else {
         noResults.classList.add("d-none");
       }
-    });
+    }
+
+    input.addEventListener("input", filtrarProductosAdmin);
+
+    if (btnClear) {
+      btnClear.addEventListener("click", function () {
+        input.value = "";
+        filtrarProductosAdmin();
+        input.focus();
+      });
+    }
   });
 </script>
 {% endblock %}

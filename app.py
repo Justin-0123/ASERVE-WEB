@@ -23,7 +23,7 @@ from flask_wtf.csrf import CSRFProtect, CSRFError
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
@@ -271,6 +271,147 @@ def validar_contrasena_segura(password):
 
     return errores
 
+# =====================================================
+# FUNCIONES AUXILIARES: IMPORTACIÓN DE PRODUCTOS EXCEL
+# =====================================================
+def importar_parse_numero(value, default=0):
+    if value is None or str(value).strip() == "":
+        return default
+
+    if isinstance(value, (int, float)):
+        return value
+
+    text = str(value).strip()
+    text = text.replace("₡", "").replace(" ", "").replace(",", "")
+
+    return float(text)
+
+
+def importar_parse_entero(value, default=0):
+    return int(importar_parse_numero(value, default))
+
+
+def importar_parse_activo(value):
+    if value is None or str(value).strip() == "":
+        return 1
+
+    text = str(value).strip().lower()
+
+    if text in ("1", "activo", "si", "sí", "true", "verdadero"):
+        return 1
+
+    if text in ("0", "inactivo", "no", "false", "falso"):
+        return 0
+
+    raise ValueError("Activo debe ser 1, 0, activo o inactivo.")
+
+
+def analizar_excel_productos(file_path):
+    wb = load_workbook(file_path, data_only=True)
+    ws = wb.active
+
+    headers = []
+    for cell in ws[1]:
+        headers.append(str(cell.value).strip().lower() if cell.value else "")
+
+    columnas_requeridas = ["nombre", "precio", "stock_a_sumar", "stock_minimo", "activo"]
+    faltantes = [c for c in columnas_requeridas if c not in headers]
+
+    if faltantes:
+        raise ValueError(f"Faltan columnas requeridas: {', '.join(faltantes)}")
+
+    idx = {nombre: headers.index(nombre) for nombre in columnas_requeridas}
+
+    db = get_db()
+
+    preview = []
+    errores_generales = []
+
+    for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+
+        # Omitir filas completamente vacías
+        if not row or all((v is None or str(v).strip() == "") for v in row):
+            continue
+
+        fila = {
+            "fila": row_num,
+            "nombre": "",
+            "precio": 0,
+            "stock_a_sumar": 0,
+            "stock_minimo": 0,
+            "activo": 1,
+            "accion": "",
+            "stock_actual": "",
+            "stock_resultante": "",
+            "estado": "OK",
+            "mensaje": ""
+        }
+
+        try:
+            nombre = str(row[idx["nombre"]] or "").strip()
+
+            if not nombre:
+                raise ValueError("Nombre vacío.")
+
+            precio_num = float(importar_parse_numero(row[idx["precio"]], None))
+            stock_sumar = importar_parse_entero(row[idx["stock_a_sumar"]], 0)
+            stock_minimo_num = importar_parse_entero(row[idx["stock_minimo"]], 0)
+            activo = importar_parse_activo(row[idx["activo"]])
+
+            if precio_num < 0:
+                raise ValueError("El precio no puede ser negativo.")
+
+            if stock_minimo_num < 0:
+                raise ValueError("El stock mínimo no puede ser negativo.")
+
+            producto = db.execute(
+                """
+                SELECT id, nombre, stock
+                FROM products
+                WHERE lower(trim(nombre)) = lower(trim(?))
+                """,
+                (nombre,)
+            ).fetchone()
+
+            fila["nombre"] = nombre
+            fila["precio"] = precio_num
+            fila["stock_a_sumar"] = stock_sumar
+            fila["stock_minimo"] = stock_minimo_num
+            fila["activo"] = activo
+
+            if producto:
+                stock_actual = int(producto["stock"])
+                stock_resultante = stock_actual + stock_sumar
+
+                fila["accion"] = "Actualizar"
+                fila["stock_actual"] = stock_actual
+                fila["stock_resultante"] = stock_resultante
+
+                if stock_resultante < 0:
+                    raise ValueError(
+                        f"El ajuste dejaría stock negativo. Stock actual: {stock_actual}."
+                    )
+
+            else:
+                fila["accion"] = "Crear"
+                fila["stock_actual"] = "Nuevo"
+                fila["stock_resultante"] = stock_sumar
+
+                if stock_sumar < 0:
+                    raise ValueError("No se puede crear un producto con stock inicial negativo.")
+
+            fila["mensaje"] = "Listo para importar."
+
+        except Exception as e:
+            fila["estado"] = "Error"
+            fila["mensaje"] = str(e)
+
+        preview.append(fila)
+
+    if not preview:
+        errores_generales.append("El archivo no contiene filas válidas para procesar.")
+
+    return preview, errores_generales
 
 # =====================================================
 # FUNCIÓN AUXILIAR: REGISTRAR AUDITORÍA
@@ -3188,26 +3329,24 @@ def admin_product_edit(product_id):
     if request.method == "POST":
         nombre = (request.form.get("nombre") or "").strip()
         precio = (request.form.get("precio") or "").strip()
-        stock = (request.form.get("stock") or "").strip()
         stock_minimo = (request.form.get("stock_minimo") or "0").strip()
         activo = 1 if request.form.get("activo") == "on" else 0
         imagen = request.files.get("imagen")
 
-        if not nombre or not precio or not stock:
-            flash("Nombre, precio y stock son obligatorios.", "danger")
+        if not nombre or not precio:
+            flash("Nombre y precio son obligatorios.", "danger")
             return redirect(url_for("admin_product_edit", product_id=product_id))
 
         try:
             precio_num = float(precio)
-            stock_num = int(stock)
             stock_minimo_num = int(stock_minimo)
 
-            if precio_num < 0 or stock_num < 0 or stock_minimo_num < 0:
-                flash("Precio, stock y stock mínimo no pueden ser negativos.", "danger")
+            if precio_num < 0 or stock_minimo_num < 0:
+                flash("Precio y stock mínimo no pueden ser negativos.", "danger")
                 return redirect(url_for("admin_product_edit", product_id=product_id))
 
         except ValueError:
-            flash("Precio debe ser número y stock/stock mínimo deben ser enteros.", "danger")
+            flash("Precio debe ser número y stock mínimo debe ser entero.", "danger")
             return redirect(url_for("admin_product_edit", product_id=product_id))
 
         # Evitar duplicar nombre con otro producto
@@ -3244,15 +3383,17 @@ def admin_product_edit(product_id):
         db.execute(
             """
             UPDATE products
-            SET nombre = ?, precio = ?, stock = ?, stock_minimo = ?, activo = ?, image_filename = ?
+            SET nombre = ?, precio = ?, stock_minimo = ?, activo = ?, image_filename = ?
             WHERE id = ?
             """,
-            (nombre, precio_num, stock_num, stock_minimo_num, activo, image_filename, product_id)
+            (nombre, precio_num, stock_minimo_num, activo, image_filename, product_id)
         )
 
         registrar_auditoria(
             "Editar producto",
-            f"Producto ID {product_id}. Nombre: {nombre}. Precio: ₡{precio_num:,.2f}. Stock: {stock_num}. Stock mínimo: {stock_minimo_num}. Estado: {'activo' if activo == 1 else 'inactivo'}."
+            f"Producto ID {product_id}. Nombre: {nombre}. Precio: ₡{precio_num:,.2f}. "
+            f"Stock actual conservado: {p['stock']}. Stock mínimo: {stock_minimo_num}. "
+            f"Estado: {'activo' if activo == 1 else 'inactivo'}."
         )
 
         db.commit()
@@ -3261,6 +3402,564 @@ def admin_product_edit(product_id):
         return redirect(url_for("admin_products"))
 
     return render_template("admin_product_edit.html", p=p)
+# =====================================================
+# ADMIN: AJUSTAR STOCK DE PRODUCTO
+# - Permite sumar o restar stock sin editar manualmente el total
+# - Registra movimiento en stock_movements
+# - Registra auditoría administrativa
+# =====================================================
+@app.route("/admin/products/<int:product_id>/stock-adjust", methods=["POST"])
+def admin_product_stock_adjust(product_id):
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    db = get_db()
+
+    producto = db.execute(
+        """
+        SELECT id, nombre, stock
+        FROM products
+        WHERE id = ?
+        """,
+        (product_id,)
+    ).fetchone()
+
+    if not producto:
+        flash("Producto no encontrado.", "danger")
+        return redirect(url_for("admin_products"))
+
+    ajuste_raw = (request.form.get("ajuste_stock") or "").strip()
+    motivo = (request.form.get("motivo_stock") or "").strip()
+
+    if not ajuste_raw:
+        flash("Debes indicar la cantidad a sumar o restar.", "warning")
+        return redirect(url_for("admin_product_edit", product_id=product_id))
+
+    try:
+        ajuste = int(ajuste_raw)
+    except ValueError:
+        flash("La cantidad de ajuste debe ser un número entero.", "danger")
+        return redirect(url_for("admin_product_edit", product_id=product_id))
+
+    if ajuste == 0:
+        flash("La cantidad de ajuste no puede ser cero.", "warning")
+        return redirect(url_for("admin_product_edit", product_id=product_id))
+
+    stock_actual = int(producto["stock"])
+    nuevo_stock = stock_actual + ajuste
+
+    if nuevo_stock < 0:
+        flash(
+            f"No se puede aplicar el ajuste. El stock actual es {stock_actual} y el resultado quedaría negativo.",
+            "danger"
+        )
+        return redirect(url_for("admin_product_edit", product_id=product_id))
+
+    if not motivo:
+        motivo = "Ajuste manual de stock"
+
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    db.execute(
+        """
+        UPDATE products
+        SET stock = ?
+        WHERE id = ?
+        """,
+        (nuevo_stock, product_id)
+    )
+
+    db.execute(
+        """
+        INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+        VALUES (?, ?, ?, ?, NULL)
+        """,
+        (product_id, ajuste, motivo, fecha)
+    )
+
+    signo = "+" if ajuste > 0 else ""
+
+    registrar_auditoria(
+        "Ajuste de stock",
+        f"Producto: {producto['nombre']}. Stock anterior: {stock_actual}. Ajuste aplicado: {signo}{ajuste}. Nuevo stock: {nuevo_stock}. Motivo: {motivo}."
+    )
+
+    db.commit()
+
+    flash(
+        f"Stock actualizado correctamente. Antes: {stock_actual} | Ajuste: {signo}{ajuste} | Nuevo stock: {nuevo_stock}.",
+        "success"
+    )
+
+    return redirect(url_for("admin_product_edit", product_id=product_id))
+
+# =====================================================
+# ADMIN: DESCARGAR PLANTILLA DE IMPORTACIÓN DE PRODUCTOS
+# Ruta: /admin/products/import/template
+# - Genera un Excel con las columnas requeridas
+# =====================================================
+@app.route("/admin/products/import/template")
+def admin_products_import_template():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Plantilla productos"
+
+    headers = ["nombre", "precio", "stock_a_sumar", "stock_minimo", "activo"]
+    ws.append(headers)
+
+    # Ejemplos
+    ws.append(["Coca Cola 600ml", 800, 10, 3, 1])
+    ws.append(["Doritos", 950, 5, 2, 1])
+    ws.append(["Producto inactivo ejemplo", 500, 0, 1, 0])
+
+    # Anchos
+    ws.column_dimensions["A"].width = 35
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 18
+    ws.column_dimensions["E"].width = 12
+
+    # Formatos
+    ws["A1"].font = Font(bold=True)
+    ws["B1"].font = Font(bold=True)
+    ws["C1"].font = Font(bold=True)
+    ws["D1"].font = Font(bold=True)
+    ws["E1"].font = Font(bold=True)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="plantilla_importacion_productos_aserve.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+# =====================================================
+# ADMIN: IMPORTAR PRODUCTOS DESDE EXCEL - PREVISUALIZACIÓN
+# Ruta: /admin/products/import
+# Formato esperado:
+# nombre | precio | stock_a_sumar | stock_minimo | activo
+# =====================================================
+@app.route("/admin/products/import", methods=["GET", "POST"])
+def admin_products_import():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        return render_template("admin_product_import.html")
+
+    archivo = request.files.get("archivo")
+
+    if not archivo or not archivo.filename:
+        flash("Debes seleccionar un archivo Excel.", "warning")
+        return redirect(url_for("admin_products_import"))
+
+    if not archivo.filename.lower().endswith(".xlsx"):
+        flash("El archivo debe ser formato .xlsx.", "danger")
+        return redirect(url_for("admin_products_import"))
+
+    # Carpeta temporal para guardar el archivo mientras se confirma
+    import_folder = os.path.join(app.instance_path, "imports")
+    os.makedirs(import_folder, exist_ok=True)
+
+    import_token = secrets.token_urlsafe(16)
+    import_filename = f"productos_import_{import_token}.xlsx"
+    import_path = os.path.join(import_folder, import_filename)
+
+    archivo.save(import_path)
+
+    try:
+        preview, errores_generales = analizar_excel_productos(import_path)
+
+        total_crear = sum(1 for r in preview if r["estado"] == "OK" and r["accion"] == "Crear")
+        total_actualizar = sum(1 for r in preview if r["estado"] == "OK" and r["accion"] == "Actualizar")
+        total_errores = sum(1 for r in preview if r["estado"] == "Error") + len(errores_generales)
+
+        return render_template(
+            "admin_product_import.html",
+            preview=True,
+            import_token=import_token,
+            preview_rows=preview,
+            errores_generales=errores_generales,
+            total_crear=total_crear,
+            total_actualizar=total_actualizar,
+            total_errores=total_errores
+        )
+
+    except Exception as e:
+        if os.path.exists(import_path):
+            os.remove(import_path)
+
+        flash(f"No se pudo leer el archivo Excel: {str(e)}", "danger")
+        return redirect(url_for("admin_products_import"))
+    # =====================================================
+    # FUNCIONES INTERNAS PARA VALIDAR DATOS DEL EXCEL
+    # =====================================================
+    def parse_numero(value, default=0):
+        if value is None or str(value).strip() == "":
+            return default
+
+        if isinstance(value, (int, float)):
+            return value
+
+        text = str(value).strip()
+        text = text.replace("₡", "").replace(" ", "").replace(",", "")
+
+        return float(text)
+
+    def parse_entero(value, default=0):
+        return int(parse_numero(value, default))
+
+    def parse_activo(value):
+        if value is None or str(value).strip() == "":
+            return 1
+
+        text = str(value).strip().lower()
+
+        if text in ("1", "activo", "si", "sí", "true", "verdadero"):
+            return 1
+
+        if text in ("0", "inactivo", "no", "false", "falso"):
+            return 0
+
+        raise ValueError("Activo debe ser 1, 0, activo o inactivo.")
+
+    try:
+        wb = load_workbook(archivo, data_only=True)
+        ws = wb.active
+
+        # Leer encabezados
+        headers = []
+        for cell in ws[1]:
+            headers.append(str(cell.value).strip().lower() if cell.value else "")
+
+        columnas_requeridas = ["nombre", "precio", "stock_a_sumar", "stock_minimo", "activo"]
+
+        faltantes = [c for c in columnas_requeridas if c not in headers]
+
+        if faltantes:
+            flash(f"Faltan columnas requeridas en el Excel: {', '.join(faltantes)}", "danger")
+            return redirect(url_for("admin_products_import"))
+
+        idx = {nombre: headers.index(nombre) for nombre in columnas_requeridas}
+
+        db = get_db()
+
+        creados = 0
+        actualizados = 0
+        stock_ajustado = 0
+        errores = []
+
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                nombre = str(row[idx["nombre"]] or "").strip()
+
+                if not nombre:
+                    errores.append(f"Fila {row_num}: nombre vacío.")
+                    continue
+
+                precio_num = float(parse_numero(row[idx["precio"]], None))
+                stock_sumar = parse_entero(row[idx["stock_a_sumar"]], 0)
+                stock_minimo_num = parse_entero(row[idx["stock_minimo"]], 0)
+                activo = parse_activo(row[idx["activo"]])
+
+                if precio_num < 0:
+                    errores.append(f"Fila {row_num}: el precio no puede ser negativo.")
+                    continue
+
+                if stock_minimo_num < 0:
+                    errores.append(f"Fila {row_num}: el stock mínimo no puede ser negativo.")
+                    continue
+
+                producto = db.execute(
+                    """
+                    SELECT id, nombre, stock
+                    FROM products
+                    WHERE lower(trim(nombre)) = lower(trim(?))
+                    """,
+                    (nombre,)
+                ).fetchone()
+
+                # =====================================================
+                # PRODUCTO EXISTENTE: actualizar datos y sumar stock
+                # =====================================================
+                if producto:
+                    stock_actual = int(producto["stock"])
+                    nuevo_stock = stock_actual + stock_sumar
+
+                    if nuevo_stock < 0:
+                        errores.append(
+                            f"Fila {row_num}: el ajuste dejaría stock negativo para '{nombre}'. Stock actual: {stock_actual}."
+                        )
+                        continue
+
+                    db.execute(
+                        """
+                        UPDATE products
+                        SET precio = ?, stock_minimo = ?, activo = ?
+                        WHERE id = ?
+                        """,
+                        (precio_num, stock_minimo_num, activo, producto["id"])
+                    )
+
+                    if stock_sumar != 0:
+                        db.execute(
+                            """
+                            UPDATE products
+                            SET stock = ?
+                            WHERE id = ?
+                            """,
+                            (nuevo_stock, producto["id"])
+                        )
+
+                        db.execute(
+                            """
+                            INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+                            VALUES (?, ?, ?, ?, NULL)
+                            """,
+                            (
+                                producto["id"],
+                                stock_sumar,
+                                "Importación Excel de productos",
+                                fecha
+                            )
+                        )
+
+                        stock_ajustado += 1
+
+                    actualizados += 1
+
+                # =====================================================
+                # PRODUCTO NUEVO: crear
+                # =====================================================
+                else:
+                    if stock_sumar < 0:
+                        errores.append(
+                            f"Fila {row_num}: no se puede crear '{nombre}' con stock inicial negativo."
+                        )
+                        continue
+
+                    cur = db.execute(
+                        """
+                        INSERT INTO products (nombre, precio, stock, stock_minimo, activo, image_filename)
+                        VALUES (?, ?, ?, ?, ?, NULL)
+                        """,
+                        (nombre, precio_num, stock_sumar, stock_minimo_num, activo)
+                    )
+
+                    product_id = cur.lastrowid
+
+                    if stock_sumar != 0:
+                        db.execute(
+                            """
+                            INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+                            VALUES (?, ?, ?, ?, NULL)
+                            """,
+                            (
+                                product_id,
+                                stock_sumar,
+                                "Importación Excel de productos",
+                                fecha
+                            )
+                        )
+
+                        stock_ajustado += 1
+
+                    creados += 1
+
+            except Exception as e:
+                errores.append(f"Fila {row_num}: {str(e)}")
+
+        registrar_auditoria(
+            "Importar productos Excel",
+            f"Importación masiva completada. Creados: {creados}. Actualizados: {actualizados}. Ajustes de stock: {stock_ajustado}. Errores: {len(errores)}."
+        )
+
+        db.commit()
+
+        return render_template(
+            "admin_product_import.html",
+            resultado=True,
+            creados=creados,
+            actualizados=actualizados,
+            stock_ajustado=stock_ajustado,
+            errores=errores
+        )
+
+    except Exception as e:
+        flash(f"No se pudo procesar el archivo: {str(e)}", "danger")
+        return redirect(url_for("admin_products_import"))
+
+# =====================================================
+# ADMIN: CONFIRMAR IMPORTACIÓN DE PRODUCTOS
+# Ruta: /admin/products/import/confirm
+# - Aplica los cambios reales después de la previsualización
+# =====================================================
+@app.route("/admin/products/import/confirm", methods=["POST"])
+def admin_products_import_confirm():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    import_token = (request.form.get("import_token") or "").strip()
+
+    if not import_token:
+        flash("No se encontró el archivo de importación para confirmar.", "danger")
+        return redirect(url_for("admin_products_import"))
+
+    import_folder = os.path.join(app.instance_path, "imports")
+    import_path = os.path.join(import_folder, f"productos_import_{import_token}.xlsx")
+
+    if not os.path.exists(import_path):
+        flash("El archivo de importación ya no existe o expiró.", "danger")
+        return redirect(url_for("admin_products_import"))
+
+    try:
+        preview, errores_generales = analizar_excel_productos(import_path)
+
+        if errores_generales:
+            flash("No se puede confirmar porque el archivo tiene errores generales.", "danger")
+            return redirect(url_for("admin_products_import"))
+
+        db = get_db()
+
+        creados = 0
+        actualizados = 0
+        stock_ajustado = 0
+        errores = []
+
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for fila in preview:
+            if fila["estado"] != "OK":
+                errores.append(f"Fila {fila['fila']}: {fila['mensaje']}")
+                continue
+
+            nombre = fila["nombre"]
+            precio_num = float(fila["precio"])
+            stock_sumar = int(fila["stock_a_sumar"])
+            stock_minimo_num = int(fila["stock_minimo"])
+            activo = int(fila["activo"])
+
+            producto = db.execute(
+                """
+                SELECT id, nombre, stock
+                FROM products
+                WHERE lower(trim(nombre)) = lower(trim(?))
+                """,
+                (nombre,)
+            ).fetchone()
+
+            if producto:
+                stock_actual = int(producto["stock"])
+                nuevo_stock = stock_actual + stock_sumar
+
+                if nuevo_stock < 0:
+                    errores.append(
+                        f"Fila {fila['fila']}: el ajuste dejaría stock negativo para '{nombre}'."
+                    )
+                    continue
+
+                db.execute(
+                    """
+                    UPDATE products
+                    SET precio = ?, stock_minimo = ?, activo = ?
+                    WHERE id = ?
+                    """,
+                    (precio_num, stock_minimo_num, activo, producto["id"])
+                )
+
+                if stock_sumar != 0:
+                    db.execute(
+                        """
+                        UPDATE products
+                        SET stock = ?
+                        WHERE id = ?
+                        """,
+                        (nuevo_stock, producto["id"])
+                    )
+
+                    db.execute(
+                        """
+                        INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+                        VALUES (?, ?, ?, ?, NULL)
+                        """,
+                        (
+                            producto["id"],
+                            stock_sumar,
+                            "Importación Excel de productos",
+                            fecha
+                        )
+                    )
+
+                    stock_ajustado += 1
+
+                actualizados += 1
+
+            else:
+                if stock_sumar < 0:
+                    errores.append(
+                        f"Fila {fila['fila']}: no se puede crear '{nombre}' con stock inicial negativo."
+                    )
+                    continue
+
+                cur = db.execute(
+                    """
+                    INSERT INTO products (nombre, precio, stock, stock_minimo, activo, image_filename)
+                    VALUES (?, ?, ?, ?, ?, NULL)
+                    """,
+                    (nombre, precio_num, stock_sumar, stock_minimo_num, activo)
+                )
+
+                product_id = cur.lastrowid
+
+                if stock_sumar != 0:
+                    db.execute(
+                        """
+                        INSERT INTO stock_movements (product_id, cambio_stock, motivo, fecha, order_id)
+                        VALUES (?, ?, ?, ?, NULL)
+                        """,
+                        (
+                            product_id,
+                            stock_sumar,
+                            "Importación Excel de productos",
+                            fecha
+                        )
+                    )
+
+                    stock_ajustado += 1
+
+                creados += 1
+
+        registrar_auditoria(
+            "Importar productos Excel",
+            f"Importación confirmada. Creados: {creados}. Actualizados: {actualizados}. Ajustes de stock: {stock_ajustado}. Errores: {len(errores)}."
+        )
+
+        db.commit()
+
+        if os.path.exists(import_path):
+            os.remove(import_path)
+
+        return render_template(
+            "admin_product_import.html",
+            resultado=True,
+            creados=creados,
+            actualizados=actualizados,
+            stock_ajustado=stock_ajustado,
+            errores=errores
+        )
+
+    except Exception as e:
+        flash(f"No se pudo confirmar la importación: {str(e)}", "danger")
+        return redirect(url_for("admin_products_import"))
 
 # =====================================================
 # ADMIN: ELIMINAR IMAGEN DE PRODUCTO
@@ -3327,6 +4026,234 @@ def admin_product_image_delete(product_id):
 
     flash("Imagen eliminada correctamente.", "success")
     return redirect(url_for("admin_product_edit", product_id=product_id))
+
+# =====================================================
+# ADMIN: EXPORTAR INVENTARIO A EXCEL
+# Ruta: /admin/products/export
+# - Descarga un Excel con el inventario actual
+# - Incluye productos activos, inactivos, stock, mínimos y valor estimado
+# =====================================================
+@app.route("/admin/products/export")
+def admin_products_export():
+    if "user_id" not in session or session.get("rol") != "admin":
+        return redirect(url_for("login"))
+
+    db = get_db()
+
+    productos = db.execute(
+        """
+        SELECT
+            id,
+            nombre,
+            precio,
+            stock,
+            stock_minimo,
+            activo,
+            image_filename
+        FROM products
+        ORDER BY nombre ASC
+        """
+    ).fetchall()
+
+    # =====================================================
+    # RESUMEN GENERAL
+    # =====================================================
+    total_productos = len(productos)
+    total_activos = sum(1 for p in productos if int(p["activo"]) == 1)
+    total_inactivos = sum(1 for p in productos if int(p["activo"]) != 1)
+
+    total_bajos = sum(
+        1 for p in productos
+        if int(p["activo"]) == 1
+        and int(p["stock_minimo"] or 0) > 0
+        and int(p["stock"] or 0) <= int(p["stock_minimo"] or 0)
+    )
+
+    valor_total_inventario = sum(
+        float(p["precio"] or 0) * int(p["stock"] or 0)
+        for p in productos
+    )
+
+    fecha_reporte = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # =====================================================
+    # CREAR EXCEL
+    # =====================================================
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventario"
+
+    # Estilos
+    fill_header = PatternFill("solid", fgColor="1F2328")
+    fill_title = PatternFill("solid", fgColor="EAF2F8")
+    font_header = Font(color="FFFFFF", bold=True)
+    font_title = Font(bold=True, size=14)
+    font_bold = Font(bold=True)
+
+    alignment_center = Alignment(horizontal="center", vertical="center")
+    alignment_left = Alignment(horizontal="left", vertical="center")
+
+    thin_border = Border(
+        left=Side(style="thin", color="D9DEE3"),
+        right=Side(style="thin", color="D9DEE3"),
+        top=Side(style="thin", color="D9DEE3"),
+        bottom=Side(style="thin", color="D9DEE3")
+    )
+
+    # =====================================================
+    # TÍTULO
+    # =====================================================
+    ws.merge_cells("A1:I1")
+    ws["A1"] = "Reporte de inventario - ASERVE"
+    ws["A1"].font = font_title
+    ws["A1"].fill = fill_title
+    ws["A1"].alignment = alignment_left
+
+    # =====================================================
+    # RESUMEN
+    # =====================================================
+    ws["A3"] = "Fecha de reporte"
+    ws["B3"] = fecha_reporte
+
+    ws["A5"] = "Productos registrados"
+    ws["B5"] = total_productos
+
+    ws["C5"] = "Activos"
+    ws["D5"] = total_activos
+
+    ws["E5"] = "Inactivos"
+    ws["F5"] = total_inactivos
+
+    ws["A6"] = "Stock bajo"
+    ws["B6"] = total_bajos
+
+    ws["C6"] = "Valor inventario"
+    ws["D6"] = float(valor_total_inventario)
+
+    ws["D6"].number_format = '"₡"#,##0'
+
+    for row in ws.iter_rows(min_row=3, max_row=6, min_col=1, max_col=9):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = alignment_left
+
+    for cell_ref in ["A3", "A5", "C5", "E5", "A6", "C6"]:
+        ws[cell_ref].font = font_bold
+
+    # =====================================================
+    # TABLA
+    # =====================================================
+    start_row = 8
+
+    headers = [
+        "ID",
+        "Nombre",
+        "Precio",
+        "Stock actual",
+        "Stock mínimo",
+        "Estado",
+        "Alerta",
+        "Valor inventario",
+        "Imagen"
+    ]
+
+    for col_num, header in enumerate(headers, start=1):
+        cell = ws.cell(row=start_row, column=col_num)
+        cell.value = header
+        cell.fill = fill_header
+        cell.font = font_header
+        cell.alignment = alignment_center
+        cell.border = thin_border
+
+    current_row = start_row + 1
+
+    for p in productos:
+        activo = int(p["activo"])
+        stock = int(p["stock"] or 0)
+        stock_minimo = int(p["stock_minimo"] or 0)
+        precio = float(p["precio"] or 0)
+
+        estado = "Activo" if activo == 1 else "Inactivo"
+
+        if activo == 1 and stock_minimo > 0 and stock <= stock_minimo:
+            alerta = "Bajo stock"
+        elif activo != 1:
+            alerta = "Producto inactivo"
+        else:
+            alerta = "OK"
+
+        valor_inventario = precio * stock
+
+        ws.cell(row=current_row, column=1).value = p["id"]
+        ws.cell(row=current_row, column=2).value = p["nombre"]
+        ws.cell(row=current_row, column=3).value = precio
+        ws.cell(row=current_row, column=4).value = stock
+        ws.cell(row=current_row, column=5).value = stock_minimo
+        ws.cell(row=current_row, column=6).value = estado
+        ws.cell(row=current_row, column=7).value = alerta
+        ws.cell(row=current_row, column=8).value = valor_inventario
+        ws.cell(row=current_row, column=9).value = p["image_filename"] or "Sin imagen"
+
+        for col in range(1, 10):
+            cell = ws.cell(row=current_row, column=col)
+            cell.border = thin_border
+            cell.alignment = alignment_left
+
+        ws.cell(row=current_row, column=3).number_format = '"₡"#,##0'
+        ws.cell(row=current_row, column=8).number_format = '"₡"#,##0'
+
+        current_row += 1
+
+    if not productos:
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=9)
+        ws.cell(row=current_row, column=1).value = "No hay productos registrados."
+        ws.cell(row=current_row, column=1).alignment = alignment_center
+
+    # =====================================================
+    # AJUSTES VISUALES
+    # =====================================================
+    widths = {
+        "A": 10,
+        "B": 35,
+        "C": 14,
+        "D": 14,
+        "E": 14,
+        "F": 14,
+        "G": 18,
+        "H": 18,
+        "I": 28,
+    }
+
+    for col_letter, width in widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    ws.freeze_panes = "A9"
+    ws.auto_filter.ref = f"A{start_row}:I{max(start_row, current_row - 1)}"
+
+    # =====================================================
+    # AUDITORÍA
+    # =====================================================
+    registrar_auditoria(
+        "Exportar inventario",
+        f"Se descargó reporte de inventario. Productos: {total_productos}. Activos: {total_activos}. Stock bajo: {total_bajos}.",
+        commit=True
+    )
+
+    # =====================================================
+    # DESCARGA
+    # =====================================================
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"inventario_aserve_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # =====================================================
 # ADMIN: ELIMINAR PRODUCTO

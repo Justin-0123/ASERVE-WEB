@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block title %}Importar productos - Admin{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    <!-- =====================================================
+         ENCABEZADO
+         ===================================================== -->
+    <div class="product-import-header mb-3">
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+        <div>
+          <h5 class="mb-0">Importar productos desde Excel</h5>
+          <small class="text-muted">
+            Primero revisá la previsualización y luego confirmá la importación
+          </small>
+        </div>
+
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_products') }}">
+          Volver
+        </a>
+      </div>
+
+    </div>
+
+    <!-- =====================================================
+         FORMATO ESPERADO
+         ===================================================== -->
+    <div class="product-import-info mb-3">
+      <h6 class="mb-2">Formato requerido</h6>
+
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>nombre</th>
+              <th>precio</th>
+              <th>stock_a_sumar</th>
+              <th>stock_minimo</th>
+              <th>activo</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr>
+              <td>Coca Cola 600ml</td>
+              <td>800</td>
+              <td>10</td>
+              <td>3</td>
+              <td>1</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-2">
+        <small class="text-muted">
+          Si el producto ya existe, se actualiza el precio, stock mínimo, estado y se suma el stock indicado.
+          Si no existe, se crea como producto nuevo.
+        </small>
+      </div>
+
+      <div class="mt-3">
+        <a class="btn btn-outline-success btn-sm"
+           href="{{ url_for('admin_products_import_template') }}">
+          Descargar plantilla Excel
+        </a>
+      </div>
+    </div>
+
+    <!-- =====================================================
+         FORMULARIO DE CARGA
+         ===================================================== -->
+    <div class="product-import-form-box mb-3">
+
+      <form method="POST"
+            action="{{ url_for('admin_products_import') }}"
+            enctype="multipart/form-data">
+
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="row g-3">
+
+          <div class="col-12 col-md-8">
+            <label class="form-label">Archivo Excel (.xlsx)</label>
+            <input
+              type="file"
+              name="archivo"
+              class="form-control"
+              accept=".xlsx"
+              required
+            >
+          </div>
+
+          <div class="col-12 col-md-4 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">
+              Revisar archivo
+            </button>
+          </div>
+
+        </div>
+
+      </form>
+
+    </div>
+
+    {% if preview %}
+      <!-- =====================================================
+           PREVISUALIZACIÓN
+           ===================================================== -->
+      <div class="product-import-preview mb-3">
+
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+          <div>
+            <h6 class="mb-1">Previsualización de importación</h6>
+            <small class="text-muted">
+              Revisá las filas antes de confirmar. No se ha guardado ningún cambio todavía.
+            </small>
+          </div>
+
+          <form method="POST"
+                action="{{ url_for('admin_products_import_confirm') }}"
+                onsubmit="return confirm('¿Confirmás que deseas importar estos productos?');">
+
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="import_token" value="{{ import_token }}">
+
+            <button type="submit"
+                    class="btn btn-success btn-sm"
+                    {% if total_errores > 0 %}disabled{% endif %}>
+              Confirmar importación
+            </button>
+          </form>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">A crear</small>
+              <div class="fw-bold">{{ total_crear }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">A actualizar</small>
+              <div class="fw-bold">{{ total_actualizar }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">Errores</small>
+              <div class="fw-bold">{{ total_errores }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">Estado</small>
+              <div class="fw-bold">
+                {% if total_errores > 0 %}
+                  Revisar
+                {% else %}
+                  Listo
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% if errores_generales %}
+          <div class="alert alert-danger">
+            <b>Errores generales:</b>
+            <ul class="mb-0 mt-2">
+              {% for e in errores_generales %}
+                <li>{{ e }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered table-striped align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th style="width: 70px;">Fila</th>
+                <th>Nombre</th>
+                <th style="width: 120px;">Precio</th>
+                <th style="width: 120px;">Ajuste</th>
+                <th style="width: 120px;">Mínimo</th>
+                <th style="width: 100px;">Activo</th>
+                <th style="width: 130px;">Acción</th>
+                <th style="width: 140px;">Stock actual</th>
+                <th style="width: 150px;">Stock final</th>
+                <th>Mensaje</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for r in preview_rows %}
+              <tr class="{% if r.estado == 'Error' %}table-danger{% elif r.accion == 'Crear' %}table-success{% else %}table-light{% endif %}">
+                <td>{{ r.fila }}</td>
+                <td>{{ r.nombre }}</td>
+                <td>{{ r.precio|crc }}</td>
+                <td>{{ r.stock_a_sumar }}</td>
+                <td>{{ r.stock_minimo }}</td>
+                <td>
+                  {% if r.activo == 1 %}
+                    <span class="badge bg-success">Activo</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Inactivo</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if r.accion == "Crear" %}
+                    <span class="badge bg-success">Crear</span>
+                  {% elif r.accion == "Actualizar" %}
+                    <span class="badge bg-primary">Actualizar</span>
+                  {% else %}
+                    <span class="badge bg-secondary">-</span>
+                  {% endif %}
+                </td>
+                <td>{{ r.stock_actual }}</td>
+                <td>{{ r.stock_resultante }}</td>
+                <td>{{ r.mensaje }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="10" class="text-center text-muted py-4">
+                  No hay filas para previsualizar.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if total_errores > 0 %}
+          <div class="alert alert-warning mt-3 mb-0">
+            Hay errores en el archivo. Corregí el Excel y volvé a cargarlo para poder confirmar la importación.
+          </div>
+        {% endif %}
+
+      </div>
+    {% endif %}
+
+    {% if resultado %}
+      <!-- =====================================================
+           RESULTADO FINAL
+           ===================================================== -->
+      <div class="product-import-result mb-3">
+        <h6 class="mb-2">Resultado de importación</h6>
+
+        <div class="row g-2">
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">Creados</small>
+              <div class="fw-bold">{{ creados }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">Actualizados</small>
+              <div class="fw-bold">{{ actualizados }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">Ajustes stock</small>
+              <div class="fw-bold">{{ stock_ajustado }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="border rounded p-2 bg-white">
+              <small class="text-muted">Errores</small>
+              <div class="fw-bold">{{ errores|length }}</div>
+            </div>
+          </div>
+        </div>
+
+        {% if errores %}
+          <div class="alert alert-warning mt-3 mb-0">
+            <b>Errores encontrados:</b>
+            <ul class="mb-0 mt-2">
+              {% for e in errores %}
+                <li>{{ e }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% else %}
+          <div class="alert alert-success mt-3 mb-0">
+            Importación completada sin errores.
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <!-- =====================================================
+         NOTA
+         ===================================================== -->
+    <div class="alert alert-light border mb-0">
+      <small class="text-muted">
+        Recomendación: antes de importar productos masivamente, descargá un respaldo del sistema.
+      </small>
+    </div>
+
+  </div>
+</div>
+
+<style>
+  .product-import-header {
+    border: 1px solid #d9dee3;
+    border-left: 5px solid #8cc63f;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .product-import-info,
+  .product-import-form-box,
+  .product-import-preview,
+  .product-import-result {
+    border: 1px solid #d9dee3;
+    border-radius: 16px;
+    background: #f3f4f6;
+    padding: 1rem;
+  }
+
+  .product-import-form-box .form-control {
+    background-color: #ffffff;
+  }
+
+  @media (max-width: 576px) {
+    .product-import-header,
+    .product-import-info,
+    .product-import-form-box,
+    .product-import-preview,
+    .product-import-result {
+      padding: .9rem;
+      border-radius: 14px;
+    }
+
+    .product-import-preview .btn {
+      width: 100%;
+    }
+  }
+</style>
+{% endblock %}
